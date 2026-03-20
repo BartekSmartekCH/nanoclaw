@@ -306,7 +306,9 @@ export class TelegramChannel implements Channel {
       const group = this.opts.registeredGroups()[chatJid];
       if (!group) return;
 
-      const voiceConfig = VOICE_AVAILABLE ? loadVoiceConfig(group.folder) : null;
+      const voiceConfig = VOICE_AVAILABLE
+        ? loadVoiceConfig(group.folder)
+        : null;
       if (!voiceConfig) {
         storeNonText(ctx, '[Voice message]');
         return;
@@ -322,7 +324,13 @@ export class TelegramChannel implements Channel {
       const isGroup =
         ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
 
-      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
 
       try {
         // Download voice file from Telegram
@@ -339,23 +347,29 @@ export class TelegramChannel implements Channel {
         await new Promise<void>((resolve, reject) => {
           const out = fs.createWriteStream(oggPath);
           out.on('error', reject);
-          https.get(fileUrl, (res) => {
-            res.pipe(out);
-            out.on('finish', () => {
-              out.close();
-              resolve();
+          https
+            .get(fileUrl, (res) => {
+              res.pipe(out);
+              out.on('finish', () => {
+                out.close();
+                resolve();
+              });
+            })
+            .on('error', (err) => {
+              out.destroy();
+              reject(err);
             });
-          }).on('error', (err) => {
-            out.destroy();
-            reject(err);
-          });
         });
 
         // Transcribe
         const text = await transcribe(oggPath, voiceConfig.language);
 
         // Cleanup downloaded file
-        try { fs.unlinkSync(oggPath); } catch { /* ignore */ }
+        try {
+          fs.unlinkSync(oggPath);
+        } catch {
+          /* ignore */
+        }
 
         const content = text
           ? formatVoiceContent(text)

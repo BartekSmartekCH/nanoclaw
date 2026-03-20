@@ -21,10 +21,13 @@ function findTool(name: string): string | null {
   }
   // Fallback: try which with a full PATH
   try {
-    return execSync(`PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:$PATH" which ${name}`, {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-    }).trim();
+    return execSync(
+      `PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:$PATH" which ${name}`,
+      {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+      },
+    ).trim();
   } catch {
     return null;
   }
@@ -56,11 +59,7 @@ export interface STTProvider {
 }
 
 export interface TTSProvider {
-  synthesize(
-    text: string,
-    voice: string,
-    outputPath: string,
-  ): Promise<boolean>;
+  synthesize(text: string, voice: string, outputPath: string): Promise<boolean>;
 }
 
 // --- Constants ---
@@ -88,7 +87,12 @@ export function checkVoiceTools(): {
 
   if (available) {
     logger.info(
-      { whisper: WHISPER_PATH, edgeTts: EDGE_TTS_PATH, ffmpeg: FFMPEG_PATH, tempDir: VOICE_TEMP_DIR },
+      {
+        whisper: WHISPER_PATH,
+        edgeTts: EDGE_TTS_PATH,
+        ffmpeg: FFMPEG_PATH,
+        tempDir: VOICE_TEMP_DIR,
+      },
       'Voice tools available',
     );
   } else {
