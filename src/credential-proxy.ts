@@ -28,10 +28,7 @@ export function startCredentialProxy(
   host = '127.0.0.1',
 ): Promise<Server> {
   // Read once at startup for upstream URL (stable) and initial auth mode
-  const initSecrets = readEnvFile([
-    'ANTHROPIC_API_KEY',
-    'ANTHROPIC_BASE_URL',
-  ]);
+  const initSecrets = readEnvFile(['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL']);
 
   const upstreamUrl = new URL(
     initSecrets.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',

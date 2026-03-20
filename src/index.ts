@@ -74,6 +74,10 @@ import {
   loadVoiceConfig,
   synthesize,
 } from './voice.js';
+import {
+  checkImageTools,
+  cleanupImageTemp,
+} from './image-processor.js';
 import { refreshOAuthToken } from './credential-refresh.js';
 import { logger } from './logger.js';
 
@@ -758,6 +762,8 @@ async function main(): Promise<void> {
   checkVoiceTools();
   ensureTempDir();
   cleanupTempDir();
+  void checkImageTools();
+  cleanupImageTemp();
 
   // Each channel self-registers via the barrel import above.
   // Factories return null when credentials are missing, so unconfigured channels are skipped.

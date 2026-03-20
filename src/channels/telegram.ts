@@ -14,6 +14,13 @@ import {
   formatVoiceContent,
   ensureTempDir,
 } from '../voice.js';
+import {
+  IMAGE_PROCESSOR_AVAILABLE,
+  downloadImageToTemp,
+  processImage,
+  writeImageResultFile,
+  formatImageContent as formatImageProcessorContent,
+} from '../image-processor.js';
 import { registerChannel, ChannelOpts, SystemStatus } from './registry.js';
 import {
   Channel,
@@ -209,7 +216,9 @@ export class TelegramChannel implements Channel {
       ctx.reply('Refreshing auth token from Keychain...');
       const result = await refreshOAuthToken();
       if (result.success) {
-        ctx.reply('✅ Token refreshed. Next agent call will use the new token.');
+        ctx.reply(
+          '✅ Token refreshed. Next agent call will use the new token.',
+        );
       } else {
         ctx.reply(
           `❌ Refresh failed: ${result.error}\nRun \`claude\` on the Mac mini to re-authenticate.`,
@@ -227,7 +236,7 @@ export class TelegramChannel implements Channel {
           [
             `*${ASSISTANT_NAME} commands:*`,
             '',
-            '/chatid — Show this chat\'s registration ID',
+            "/chatid — Show this chat's registration ID",
             '/ping — Check if bot is online',
             '/help — This message',
             '',
@@ -257,10 +266,7 @@ export class TelegramChannel implements Channel {
         );
       }
 
-      lines.push(
-        '',
-        `Mention @${ASSISTANT_NAME} to talk to the agent.`,
-      );
+      lines.push('', `Mention @${ASSISTANT_NAME} to talk to the agent.`);
 
       ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
     });
@@ -434,7 +440,54 @@ export class TelegramChannel implements Channel {
       });
     };
 
-    this.bot.on('message:photo', (ctx) => storeNonText(ctx, '[Photo]'));
+    this.bot.on('message:photo', async (ctx) => {
+      if (!IMAGE_PROCESSOR_AVAILABLE) {
+        storeNonText(ctx, '[Photo]');
+        return;
+      }
+      const chatJid = `tg:${ctx.chat.id}`;
+      const msgId = ctx.message.message_id.toString();
+      const timestamp = new Date(ctx.message.date * 1000).toISOString();
+      const senderName =
+        ctx.from?.first_name ||
+        ctx.from?.username ||
+        ctx.from?.id?.toString() ||
+        'Unknown';
+      const isGroup =
+        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+      try {
+        const photo = ctx.message.photo[ctx.message.photo.length - 1];
+        const file = await ctx.api.getFile(photo.file_id);
+        if (!file.file_path) {
+          storeNonText(ctx, '[Photo]');
+          return;
+        }
+        const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+        const imgPath = await downloadImageToTemp(fileUrl, photo.file_unique_id);
+        const result = await processImage(imgPath);
+        if (!result) {
+          storeNonText(ctx, '[Photo - processing failed]');
+          return;
+        }
+        const filePath = writeImageResultFile(msgId, result);
+        const caption = ctx.message.caption || '';
+        const content = formatImageProcessorContent(filePath, result);
+        this.opts.onMessage(chatJid, {
+          id: msgId,
+          chat_jid: chatJid,
+          sender: ctx.from?.id?.toString() || '',
+          sender_name: senderName,
+          content: caption ? `${content}\n${caption}` : content,
+          timestamp,
+          is_from_me: false,
+        });
+        logger.info({ chatJid, msgId }, 'Photo processed via image processor');
+      } catch (err) {
+        logger.error({ err }, 'Error processing photo');
+        storeNonText(ctx, '[Photo - processing error]');
+      }
+    });
     this.bot.on('message:video', (ctx) => storeNonText(ctx, '[Video]'));
     this.bot.on('message:voice', async (ctx) => {
       const chatJid = `tg:${ctx.chat.id}`;
@@ -530,9 +583,55 @@ export class TelegramChannel implements Channel {
       }
     });
     this.bot.on('message:audio', (ctx) => storeNonText(ctx, '[Audio]'));
-    this.bot.on('message:document', (ctx) => {
+    this.bot.on('message:document', async (ctx) => {
+      const mime = ctx.message.document?.mime_type || '';
       const name = ctx.message.document?.file_name || 'file';
-      storeNonText(ctx, `[Document: ${name}]`);
+      if (!IMAGE_PROCESSOR_AVAILABLE || (!mime.startsWith('image/') && mime !== 'application/pdf')) {
+        storeNonText(ctx, `[Document: ${name}]`);
+        return;
+      }
+      const chatJid = `tg:${ctx.chat.id}`;
+      const msgId = ctx.message.message_id.toString();
+      const timestamp = new Date(ctx.message.date * 1000).toISOString();
+      const senderName =
+        ctx.from?.first_name ||
+        ctx.from?.username ||
+        ctx.from?.id?.toString() ||
+        'Unknown';
+      const isGroup =
+        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+      try {
+        const doc = ctx.message.document!;
+        const file = await ctx.api.getFile(doc.file_id);
+        if (!file.file_path) {
+          storeNonText(ctx, `[Document: ${name}]`);
+          return;
+        }
+        const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+        const imgPath = await downloadImageToTemp(fileUrl, doc.file_unique_id);
+        const result = await processImage(imgPath);
+        if (!result) {
+          storeNonText(ctx, `[Document: ${name}]`);
+          return;
+        }
+        const filePath = writeImageResultFile(msgId, result);
+        const caption = ctx.message.caption || '';
+        const content = formatImageProcessorContent(filePath, result);
+        this.opts.onMessage(chatJid, {
+          id: msgId,
+          chat_jid: chatJid,
+          sender: ctx.from?.id?.toString() || '',
+          sender_name: senderName,
+          content: caption ? `${content}\n${caption}` : content,
+          timestamp,
+          is_from_me: false,
+        });
+        logger.info({ chatJid, msgId, mime }, 'Document processed via image processor');
+      } catch (err) {
+        logger.error({ err }, 'Error processing document');
+        storeNonText(ctx, `[Document: ${name}]`);
+      }
     });
     this.bot.on('message:sticker', (ctx) => {
       const emoji = ctx.message.sticker?.emoji || '';

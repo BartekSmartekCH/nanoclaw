@@ -123,9 +123,7 @@ export async function refreshOAuthToken(): Promise<{
  *   2. A token exists in .env (API key or OAuth)
  *   3. For OAuth: the Keychain token matches .env (not stale)
  */
-export async function checkAuthHealth(
-  proxyPort = 3001,
-): Promise<{
+export async function checkAuthHealth(proxyPort = 3001): Promise<{
   ok: boolean;
   error?: string;
 }> {
@@ -153,7 +151,8 @@ export async function checkAuthHealth(
       if (keychainToken && keychainToken !== envVars[ENV_KEY]) {
         return {
           ok: false,
-          error: 'Token in .env is stale (differs from Keychain). Run /fix_auth',
+          error:
+            'Token in .env is stale (differs from Keychain). Run /fix_auth',
         };
       }
     }

@@ -235,13 +235,19 @@ const edgeTTS: TTSProvider = {
   ): Promise<boolean> {
     const mp3Path = outputPath.replace(/\.ogg$/, '.mp3');
 
+    const textFile = outputPath.replace(/\.ogg$/, '.txt');
+
     try {
+      // Write text to file to avoid shell escaping issues with special characters
+      fs.writeFileSync(textFile, text, 'utf-8');
+
       // edge-tts → MP3
       await execFileAsync(
         EDGE_TTS_PATH!,
-        ['--voice', voice, '--text', text, '--write-media', mp3Path],
+        ['--voice', voice, '--file', textFile, '--write-media', mp3Path],
         { timeout: PROCESS_TIMEOUT, env: TOOL_ENV },
       );
+      safeUnlink(textFile);
 
       // ffmpeg MP3 → OGG (Telegram-compatible opus)
       await execFileAsync(
@@ -255,6 +261,7 @@ const edgeTTS: TTSProvider = {
     } catch (err) {
       logger.error({ voice, err }, 'TTS synthesis failed');
       safeUnlink(mp3Path);
+      safeUnlink(textFile);
       return false;
     }
   },
