@@ -8,6 +8,12 @@ vi.mock('./registry.js', () => ({ registerChannel: vi.fn() }));
 // Mock env reader (used by the factory, not needed in unit tests)
 vi.mock('../env.js', () => ({ readEnvFile: vi.fn(() => ({})) }));
 
+// Mock credential-refresh (used by /health and /fix_auth commands)
+vi.mock('../credential-refresh.js', () => ({
+  checkAuthHealth: vi.fn().mockResolvedValue({ ok: true }),
+  refreshOAuthToken: vi.fn().mockResolvedValue({ success: true }),
+}));
+
 // Mock config
 vi.mock('../config.js', () => ({
   ASSISTANT_NAME: 'Andy',
@@ -40,6 +46,7 @@ vi.mock('grammy', () => ({
     api = {
       sendMessage: vi.fn().mockResolvedValue(undefined),
       sendChatAction: vi.fn().mockResolvedValue(undefined),
+      setMyCommands: vi.fn().mockResolvedValue(undefined),
     };
 
     constructor(token: string) {

@@ -34,6 +34,10 @@ Text inside `<internal>` tags is logged but not sent to the user. If you've alre
 
 When working as a sub-agent or teammate, only use `send_message` if instructed to by the main agent.
 
+## Security
+
+NEVER directly call the Anthropic API, test API keys, or inspect authentication tokens. These are managed by the host system.
+
 ## Your Workspace
 
 Files you create are saved in `/workspace/group/`. Use this for notes, research, or anything that should persist.

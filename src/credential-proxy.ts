@@ -27,19 +27,14 @@ export function startCredentialProxy(
   port: number,
   host = '127.0.0.1',
 ): Promise<Server> {
-  const secrets = readEnvFile([
+  // Read once at startup for upstream URL (stable) and initial auth mode
+  const initSecrets = readEnvFile([
     'ANTHROPIC_API_KEY',
-    'CLAUDE_CODE_OAUTH_TOKEN',
-    'ANTHROPIC_AUTH_TOKEN',
     'ANTHROPIC_BASE_URL',
   ]);
 
-  const authMode: AuthMode = secrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
-  const oauthToken =
-    secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.ANTHROPIC_AUTH_TOKEN;
-
   const upstreamUrl = new URL(
-    secrets.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
+    initSecrets.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
   );
   const isHttps = upstreamUrl.protocol === 'https:';
   const makeRequest = isHttps ? httpsRequest : httpRequest;
@@ -49,6 +44,18 @@ export function startCredentialProxy(
       const chunks: Buffer[] = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
+        // Re-read credentials on each request so token refreshes take effect
+        const secrets = readEnvFile([
+          'ANTHROPIC_API_KEY',
+          'CLAUDE_CODE_OAUTH_TOKEN',
+          'ANTHROPIC_AUTH_TOKEN',
+        ]);
+        const authMode: AuthMode = secrets.ANTHROPIC_API_KEY
+          ? 'api-key'
+          : 'oauth';
+        const oauthToken =
+          secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.ANTHROPIC_AUTH_TOKEN;
+
         const body = Buffer.concat(chunks);
         const headers: Record<string, string | number | string[] | undefined> =
           {
@@ -110,7 +117,8 @@ export function startCredentialProxy(
     });
 
     server.listen(port, host, () => {
-      logger.info({ port, host, authMode }, 'Credential proxy started');
+      const mode = initSecrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
+      logger.info({ port, host, authMode: mode }, 'Credential proxy started');
       resolve(server);
     });
 

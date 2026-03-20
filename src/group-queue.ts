@@ -344,6 +344,22 @@ export class GroupQueue {
     }
   }
 
+  getStatus(): {
+    activeCount: number;
+    waitingCount: number;
+    activeGroups: string[];
+  } {
+    const activeGroups: string[] = [];
+    for (const [jid, state] of this.groups) {
+      if (state.active) activeGroups.push(jid);
+    }
+    return {
+      activeCount: this.activeCount,
+      waitingCount: this.waitingGroups.length,
+      activeGroups,
+    };
+  }
+
   async shutdown(_gracePeriodMs: number): Promise<void> {
     this.shuttingDown = true;
 

@@ -3,6 +3,7 @@ import https from 'https';
 import { Api, Bot, InputFile } from 'grammy';
 
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
+import { checkAuthHealth, refreshOAuthToken } from '../credential-refresh.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import {
@@ -13,7 +14,7 @@ import {
   formatVoiceContent,
   ensureTempDir,
 } from '../voice.js';
-import { registerChannel, ChannelOpts } from './registry.js';
+import { registerChannel, ChannelOpts, SystemStatus } from './registry.js';
 import {
   Channel,
   OnChatMetadata,
@@ -25,6 +26,7 @@ export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
+  getSystemStatus?: () => SystemStatus;
 }
 
 /**
@@ -180,9 +182,142 @@ export class TelegramChannel implements Channel {
       ctx.reply(`${ASSISTANT_NAME} is online.`);
     });
 
+    // Command to check API auth health (main group only)
+    this.bot.command('health', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group?.isMain) {
+        ctx.reply('This command is only available in the main group.');
+        return;
+      }
+      const result = await checkAuthHealth();
+      if (result.ok) {
+        ctx.reply('✅ API auth is working.');
+      } else {
+        ctx.reply(`❌ API auth failed: ${result.error}`);
+      }
+    });
+
+    // Command to refresh OAuth token from Keychain (main group only)
+    this.bot.command('fix_auth', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group?.isMain) {
+        ctx.reply('This command is only available in the main group.');
+        return;
+      }
+      ctx.reply('Refreshing auth token from Keychain...');
+      const result = await refreshOAuthToken();
+      if (result.success) {
+        ctx.reply('✅ Token refreshed. Next agent call will use the new token.');
+      } else {
+        ctx.reply(
+          `❌ Refresh failed: ${result.error}\nRun \`claude\` on the Mac mini to re-authenticate.`,
+        );
+      }
+    });
+
+    // Command to show available commands
+    this.bot.command('help', (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+
+      if (!group) {
+        ctx.reply(
+          [
+            `*${ASSISTANT_NAME} commands:*`,
+            '',
+            '/chatid — Show this chat\'s registration ID',
+            '/ping — Check if bot is online',
+            '/help — This message',
+            '',
+            `This chat is not registered. Use /chatid to get the ID, then register it via the main group.`,
+          ].join('\n'),
+          { parse_mode: 'Markdown' },
+        );
+        return;
+      }
+
+      const lines = [
+        `*${ASSISTANT_NAME} commands:*`,
+        '',
+        '/ping — Check if bot is online',
+        '/chatid — Show chat registration ID',
+        '/help — List available commands',
+      ];
+
+      if (group.isMain) {
+        lines.push(
+          '/status — System health and queue status',
+          '/health — Test API authentication',
+          '/fix\\_auth — Refresh OAuth token from Keychain',
+          '/compact — Compact agent context window',
+          '/remote-control — Start Claude Code bridge',
+          '/remote-control-end — Stop Claude Code bridge',
+        );
+      }
+
+      lines.push(
+        '',
+        `Mention @${ASSISTANT_NAME} to talk to the agent.`,
+      );
+
+      ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
+    });
+
+    // Command to show system status (main group only)
+    this.bot.command('status', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group?.isMain) {
+        ctx.reply('This command is only available in the main group.');
+        return;
+      }
+
+      const status = this.opts.getSystemStatus?.();
+      const auth = await checkAuthHealth();
+
+      const lines = [`*${ASSISTANT_NAME} status:*`, ''];
+
+      if (status) {
+        const totalSec = Math.floor(status.uptimeMs / 1000);
+        const days = Math.floor(totalSec / 86400);
+        const hours = Math.floor((totalSec % 86400) / 3600);
+        const mins = Math.floor((totalSec % 3600) / 60);
+        const parts: string[] = [];
+        if (days > 0) parts.push(`${days}d`);
+        if (hours > 0) parts.push(`${hours}h`);
+        parts.push(`${mins}m`);
+        lines.push(`Uptime: ${parts.join(' ')}`);
+        lines.push(`Groups: ${status.groupCount} registered`);
+
+        if (status.queueActive === 0 && status.queueWaiting === 0) {
+          lines.push('Queue: idle');
+        } else {
+          const parts2: string[] = [];
+          if (status.queueActive > 0)
+            parts2.push(`${status.queueActive} active`);
+          if (status.queueWaiting > 0)
+            parts2.push(`${status.queueWaiting} waiting`);
+          lines.push(`Queue: ${parts2.join(', ')}`);
+        }
+      }
+
+      lines.push(`Auth: ${auth.ok ? 'OK' : `FAILED — ${auth.error}`}`);
+
+      ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
+    });
+
     // Telegram bot commands handled above — skip them in the general handler
     // so they don't also get stored as messages. All other /commands flow through.
-    const TELEGRAM_BOT_COMMANDS = new Set(['chatid', 'ping']);
+    const TELEGRAM_BOT_COMMANDS = new Set([
+      'chatid',
+      'ping',
+      'health',
+      'fix_auth',
+      'help',
+      'status',
+    ]);
 
     this.bot.on('message:text', async (ctx) => {
       if (ctx.message.text.startsWith('/')) {
@@ -410,6 +545,18 @@ export class TelegramChannel implements Channel {
     this.bot.catch((err) => {
       logger.error({ err: err.message }, 'Telegram bot error');
     });
+
+    // Register command menu with Telegram for autocomplete
+    const defaultCommands = [
+      { command: 'ping', description: 'Check if bot is online' },
+      { command: 'chatid', description: 'Show chat registration ID' },
+      { command: 'help', description: 'List available commands' },
+    ];
+    this.bot.api
+      .setMyCommands(defaultCommands)
+      .catch((err) =>
+        logger.warn({ err }, 'Failed to set Telegram bot commands'),
+      );
 
     // Start polling — returns a Promise that resolves when started
     return new Promise<void>((resolve) => {

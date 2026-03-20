@@ -74,6 +74,7 @@ import {
   loadVoiceConfig,
   synthesize,
 } from './voice.js';
+import { refreshOAuthToken } from './credential-refresh.js';
 import { logger } from './logger.js';
 
 // Re-export for backwards compatibility during refactor
@@ -84,6 +85,7 @@ let sessions: Record<string, string> = {};
 let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
+const startedAt = Date.now();
 
 const channels: Channel[] = [];
 const queue = new GroupQueue();
@@ -160,11 +162,26 @@ export function _setRegisteredGroups(
   registeredGroups = groups;
 }
 
+/** Auth error patterns in agent output */
+const AUTH_ERROR_PATTERNS = [
+  /401.*(?:authentication|unauthorized)/i,
+  /authentication_error/i,
+  /invalid authentication credentials/i,
+  /failed to authenticate/i,
+];
+
+function isAuthError(text: string): boolean {
+  return AUTH_ERROR_PATTERNS.some((p) => p.test(text));
+}
+
 /**
  * Process all pending messages for a group.
  * Called by the GroupQueue when it's this group's turn.
  */
-async function processGroupMessages(chatJid: string): Promise<boolean> {
+async function processGroupMessages(
+  chatJid: string,
+  _retryAfterRefresh = false,
+): Promise<boolean> {
   const group = registeredGroups[chatJid];
   if (!group) return true;
 
@@ -269,6 +286,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   await channel.setTyping?.(chatJid, true);
   let hadError = false;
   let outputSentToUser = false;
+  let lastErrorText = '';
 
   const output = await runAgent(group, prompt, chatJid, async (result) => {
     // Streaming output callback — called for each agent result
@@ -317,6 +335,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
     if (result.status === 'error') {
       hadError = true;
+      if (result.error) lastErrorText = result.error;
+      else if (typeof result.result === 'string') lastErrorText = result.result;
     }
   });
 
@@ -334,6 +354,39 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       );
       return true;
     }
+
+    // Auth error auto-recovery: refresh token from Keychain and retry once
+    if (isAuthError(lastErrorText) && !_retryAfterRefresh) {
+      logger.warn(
+        { group: group.name },
+        'Auth error detected, attempting token refresh from Keychain',
+      );
+      const refresh = await refreshOAuthToken();
+      if (refresh.success) {
+        logger.info(
+          { group: group.name },
+          'OAuth token refreshed, retrying agent',
+        );
+        await channel.sendMessage(
+          chatJid,
+          '⚠️ Auth token expired — auto-refreshed from Keychain. Retrying...',
+        );
+        // Roll back cursor so retry picks up the same messages
+        lastAgentTimestamp[chatJid] = previousCursor;
+        saveState();
+        return processGroupMessages(chatJid, true);
+      } else {
+        logger.error(
+          { group: group.name, error: refresh.error },
+          'Token refresh failed',
+        );
+        await channel.sendMessage(
+          chatJid,
+          `⚠️ Auth failed and auto-refresh failed: ${refresh.error}\nRun \`claude\` on the Mac mini to re-authenticate.`,
+        );
+      }
+    }
+
     // Roll back cursor so retries can re-process these messages
     lastAgentTimestamp[chatJid] = previousCursor;
     saveState();
@@ -652,6 +705,16 @@ async function main(): Promise<void> {
 
   // Channel callbacks (shared by all channels)
   const channelOpts = {
+    getSystemStatus: () => {
+      const qs = queue.getStatus();
+      return {
+        uptimeMs: Date.now() - startedAt,
+        groupCount: Object.keys(registeredGroups).length,
+        queueActive: qs.activeCount,
+        queueWaiting: qs.waitingCount,
+        activeGroups: qs.activeGroups,
+      };
+    },
     onMessage: (chatJid: string, msg: NewMessage) => {
       // Remote control commands — intercept before storage
       const trimmed = msg.content.trim();

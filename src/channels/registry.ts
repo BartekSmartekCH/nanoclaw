@@ -5,10 +5,19 @@ import {
   RegisteredGroup,
 } from '../types.js';
 
+export interface SystemStatus {
+  uptimeMs: number;
+  groupCount: number;
+  queueActive: number;
+  queueWaiting: number;
+  activeGroups: string[];
+}
+
 export interface ChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
+  getSystemStatus?: () => SystemStatus;
 }
 
 export type ChannelFactory = (opts: ChannelOpts) => Channel | null;
