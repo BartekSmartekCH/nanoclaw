@@ -62,6 +62,14 @@ import {
 import { extractSessionCommand, handleSessionCommand, isSessionCommandAllowed } from './session-commands.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
+import {
+  checkVoiceTools,
+  cleanupTempDir,
+  ensureTempDir,
+  isVoiceMessage,
+  loadVoiceConfig,
+  synthesize,
+} from './voice.js';
 import { logger } from './logger.js';
 
 // Re-export for backwards compatibility during refactor
@@ -75,6 +83,7 @@ let messageLoopRunning = false;
 
 const channels: Channel[] = [];
 const queue = new GroupQueue();
+const voiceTriggered = new Map<string, boolean>();
 
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
@@ -212,6 +221,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     }
   }
 
+  // Track if any message in this batch was a voice note (for mirror-mode TTS)
+  if (missedMessages.some((m) => isVoiceMessage(m.content))) {
+    voiceTriggered.set(chatJid, true);
+  }
+
   const prompt = formatMessages(missedMessages, TIMEZONE);
 
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
@@ -257,6 +271,32 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       if (text) {
         await channel.sendMessage(chatJid, text);
         outputSentToUser = true;
+
+        // Voice mirror: if triggered by a voice message, send TTS reply too
+        if (voiceTriggered.get(chatJid) && channel.sendVoice) {
+          const voiceConfig = loadVoiceConfig(
+            registeredGroups[chatJid]?.folder || '',
+          );
+          if (voiceConfig && text.length <= voiceConfig.max_tts_chars) {
+            synthesize(text, voiceConfig.tts_voice, `reply-${Date.now()}`)
+              .then(async (oggPath) => {
+                if (oggPath) {
+                  await channel.sendVoice!(chatJid, oggPath);
+                  try {
+                    fs.unlinkSync(oggPath);
+                  } catch {
+                    /* ignore */
+                  }
+                }
+              })
+              .catch((err) =>
+                logger.warn(
+                  { chatJid, err },
+                  'TTS failed, text already sent',
+                ),
+              );
+          }
+        }
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)
       resetIdleTimer();
@@ -272,6 +312,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   });
 
   await channel.setTyping?.(chatJid, false);
+  voiceTriggered.delete(chatJid);
   if (idleTimer) clearTimeout(idleTimer);
 
   if (output === 'error' || hadError) {
@@ -474,6 +515,11 @@ async function startMessageLoop(): Promise<void> {
             allPending.length > 0 ? allPending : groupMessages;
           const formatted = formatMessages(messagesToSend, TIMEZONE);
 
+          // Track voice for mirror-mode TTS in the pipe path too
+          if (messagesToSend.some((m) => isVoiceMessage(m.content))) {
+            voiceTriggered.set(chatJid, true);
+          }
+
           if (queue.sendMessage(chatJid, formatted)) {
             logger.debug(
               { chatJid, count: messagesToSend.length },
@@ -631,6 +677,11 @@ async function main(): Promise<void> {
   };
 
   // Create and connect all registered channels.
+  // Voice pipeline: check for whisper, edge-tts, ffmpeg
+  checkVoiceTools();
+  ensureTempDir();
+  cleanupTempDir();
+
   // Each channel self-registers via the barrel import above.
   // Factories return null when credentials are missing, so unconfigured channels are skipped.
   for (const channelName of getRegisteredChannelNames()) {
