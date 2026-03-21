@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.nanoclaw.watchdog</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/node</string>
+        <string>/Users/tataadmin/nanoclaw/scripts/watchdog.mjs</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/tataadmin/nanoclaw</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/tataadmin</string>
+        <key>NANOCLAW_HOME</key>
+        <string>/Users/tataadmin/nanoclaw</string>
+    </dict>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/tataadmin/Library/Logs/nanoclaw-watchdog.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/tataadmin/Library/Logs/nanoclaw-watchdog.log</string>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>

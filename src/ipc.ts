@@ -6,6 +6,7 @@ import { CronExpressionParser } from 'cron-parser';
 import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import { sendPoolMessage } from './channels/telegram.js';
 import { AvailableGroup } from './container-runner.js';
+import { refreshOAuthToken } from './credential-refresh.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
@@ -461,6 +462,33 @@ export async function processTaskIpc(
         logger.warn(
           { data },
           'Invalid register_group request - missing required fields',
+        );
+      }
+      break;
+
+    case 'refresh_auth':
+      if (isMain) {
+        logger.info({ sourceGroup }, 'Auth refresh requested via IPC');
+        const result = await refreshOAuthToken();
+        if (result.success) {
+          logger.info('Auth token refreshed via IPC');
+        } else {
+          logger.error({ error: result.error }, 'Auth refresh via IPC failed');
+        }
+        // Write result so external tools can check the outcome
+        const resultDir = path.join(DATA_DIR, 'ipc', 'results');
+        fs.mkdirSync(resultDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(resultDir, 'refresh_auth.json'),
+          JSON.stringify({
+            ...result,
+            timestamp: new Date().toISOString(),
+          }),
+        );
+      } else {
+        logger.warn(
+          { sourceGroup },
+          'Unauthorized refresh_auth attempt blocked',
         );
       }
       break;

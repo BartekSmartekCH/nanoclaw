@@ -49,33 +49,51 @@ async function readKeychainToken(): Promise<string | null> {
 
 /**
  * Update a single key in the .env file. Preserves all other lines.
+ * Uses a lock file to prevent races with the watchdog script.
  */
 function updateEnvKey(key: string, value: string): void {
   const envPath = path.join(process.cwd(), '.env');
-  let content: string;
+  const lockPath = envPath + '.lock';
+
   try {
-    content = fs.readFileSync(envPath, 'utf-8');
+    fs.writeFileSync(lockPath, String(process.pid), { flag: 'wx' });
   } catch {
-    content = '';
+    logger.warn('updateEnvKey: .env lock busy — skipping update');
+    return;
   }
 
-  const lines = content.split('\n');
-  let found = false;
-
-  const updated = lines.map((line) => {
-    const trimmed = line.trim();
-    if (trimmed.startsWith(`${key}=`) || trimmed.startsWith(`${key} =`)) {
-      found = true;
-      return `${key}=${value}`;
+  try {
+    let content: string;
+    try {
+      content = fs.readFileSync(envPath, 'utf-8');
+    } catch {
+      content = '';
     }
-    return line;
-  });
 
-  if (!found) {
-    updated.push(`${key}=${value}`);
+    const lines = content.split('\n');
+    let found = false;
+
+    const updated = lines.map((line) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith(`${key}=`) || trimmed.startsWith(`${key} =`)) {
+        found = true;
+        return `${key}=${value}`;
+      }
+      return line;
+    });
+
+    if (!found) {
+      updated.push(`${key}=${value}`);
+    }
+
+    fs.writeFileSync(envPath, updated.join('\n'));
+  } finally {
+    try {
+      fs.unlinkSync(lockPath);
+    } catch {
+      /* ignore */
+    }
   }
-
-  fs.writeFileSync(envPath, updated.join('\n'));
 }
 
 /**
