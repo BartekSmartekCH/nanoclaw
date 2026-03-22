@@ -86,6 +86,15 @@ function buildVolumeMounts(
         readonly: true,
       });
     }
+
+    // Scopes directory — writable so agents can create/update scopes
+    const scopesDir = path.join(projectRoot, 'scopes');
+    fs.mkdirSync(scopesDir, { recursive: true });
+    mounts.push({
+      hostPath: scopesDir,
+      containerPath: '/workspace/project/scopes',
+      readonly: false,
+    });
   }
 
   // Group folder (all groups get their own writable folder)

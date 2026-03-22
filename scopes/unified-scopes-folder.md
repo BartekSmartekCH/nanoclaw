@@ -62,11 +62,19 @@ groups/telegram_main/scopes/ → scopes/
 groups/telegram_dev/scopes/  → scopes/
 ```
 
+Delete the source directories after migration so they can't be accidentally written to later:
+
+```bash
+rm -rf groups/telegram_dev/scopes && rm -rf groups/telegram_main/scopes
+```
+
 Proposed directory structure after migration:
 
 ```
 scopes/
 ├── auth-recovery.md              (existing)
+├── auth-recovery/                (from telegram_main)
+│   └── SCOPE.md
 ├── lead-scraper.md               (existing, untracked)
 ├── lead-scraper.pdf              (existing, untracked)
 ├── telegram-commands.md          (existing)
@@ -105,7 +113,7 @@ Stage and commit all migrated scopes + lead-scraper files so everything is track
 ## 4. What Does NOT Change
 
 - **Non-container bots** (CoderBot) — already write to `scopes/` directly, no change needed
-- **`.gitignore`** — `scopes/` is already tracked, no change needed
+- **`.gitignore`** — `scopes/` is already tracked; add `scopes/**/*.pdf` to keep PDFs out of the repo (binary bloat)
 - **Group folders** — still exist for conversations, memory, and runtime data
 - **Container security** — `.env` shadow mount unchanged, only `scopes/` gets write access
 
@@ -115,7 +123,17 @@ Stage and commit all migrated scopes + lead-scraper files so everything is track
 |------|--------|------------|
 | Agent writes junk to scopes/ | Low — scopes are reviewed by Bartek | Git tracks all changes, easy to revert |
 | Mount order conflict with project root | None — Docker uses most-specific mount | Scopes mount is more specific than project root |
-| Large files bloating repo | Low | `.pdf` and `.html` are small; add `.gitignore` rule if needed |
+| Large files bloating repo | Low | `scopes/**/*.pdf` added to `.gitignore` to keep binaries out of the repo |
+
+### Change 4 — `.gitignore`
+
+Add to `.gitignore`:
+
+```
+scopes/**/*.pdf
+```
+
+This keeps PDF binaries (generated scope documents) out of the git repo while tracking all `.md` and `.html` scope files.
 
 ## 6. Smoke Test
 
@@ -123,3 +141,4 @@ Stage and commit all migrated scopes + lead-scraper files so everything is track
 2. `git status` shows the new file as untracked (not hidden by gitignore)
 3. CoderBot reads the same file directly
 4. Existing scopes still readable at `/workspace/project/scopes/` in container
+5. Inside the dev container, create a file at `/workspace/project/scopes/test.md` — verify it appears on the host at `~/nanoclaw/scopes/test.md`

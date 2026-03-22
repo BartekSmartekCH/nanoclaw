@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TataNano User Guide &mdash; Extending Your Personal AI Assistant</title>
+<style>
+  /* ===== Reset & Base ===== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --primary: #4f46e5;
+    --primary-dark: #3730a3;
+    --primary-light: #e0e7ff;
+    --primary-lighter: #eef2ff;
+    --accent: #7c3aed;
+    --success: #059669;
+    --success-bg: #ecfdf5;
+    --warning: #d97706;
+    --warning-bg: #fffbeb;
+    --danger: #dc2626;
+    --danger-bg: #fef2f2;
+    --info: #0284c7;
+    --info-bg: #f0f9ff;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-600: #4b5563;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -1px rgba(0,0,0,.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -2px rgba(0,0,0,.05);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.7;
+    color: var(--gray-800);
+    background: var(--gray-50);
+  }
+
+  /* ===== Layout ===== */
+  .page-wrapper {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  /* ===== Header ===== */
+  .hero {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+    color: #fff;
+    border-radius: var(--radius);
+    padding: 3rem 2.5rem;
+    margin-bottom: 2.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 400px;
+    height: 400px;
+    background: rgba(255,255,255,.07);
+    border-radius: 50%;
+  }
+  .hero h1 { font-size: 2.25rem; font-weight: 800; margin-bottom: .5rem; position: relative; z-index: 1; }
+  .hero .subtitle { font-size: 1.1rem; opacity: .9; position: relative; z-index: 1; }
+  .hero .badge {
+    display: inline-block;
+    background: rgba(255,255,255,.2);
+    padding: .25rem .75rem;
+    border-radius: 999px;
+    font-size: .8rem;
+    font-weight: 600;
+    letter-spacing: .03em;
+    margin-bottom: 1rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ===== Print Button ===== */
+  .print-btn {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    padding: .75rem 1.5rem;
+    font-size: .95rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: var(--shadow-lg);
+    transition: transform .15s, background .15s;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+  }
+  .print-btn:hover { background: var(--primary-dark); transform: translateY(-2px); }
+
+  /* ===== Table of Contents ===== */
+  .toc {
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    padding: 1.5rem 2rem;
+    margin-bottom: 2.5rem;
+    box-shadow: var(--shadow);
+  }
+  .toc h2 { font-size: 1.1rem; color: var(--primary); margin-bottom: .75rem; }
+  .toc ol { padding-left: 1.25rem; }
+  .toc li { margin-bottom: .35rem; }
+  .toc a { color: var(--primary); text-decoration: none; font-weight: 500; }
+  .toc a:hover { text-decoration: underline; }
+
+  /* ===== Sections ===== */
+  .section {
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    padding: 2rem 2.5rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow);
+  }
+  .section h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 1rem;
+    padding-bottom: .5rem;
+    border-bottom: 2px solid var(--primary-light);
+  }
+  .section h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--gray-800);
+    margin: 1.5rem 0 .75rem;
+  }
+  .section h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin: 1.25rem 0 .5rem;
+  }
+  .section p { margin-bottom: .85rem; }
+  .section ul, .section ol { padding-left: 1.5rem; margin-bottom: .85rem; }
+  .section li { margin-bottom: .35rem; }
+
+  /* ===== Callout Boxes ===== */
+  .callout {
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1.25rem 0;
+    display: flex;
+    gap: .75rem;
+    align-items: flex-start;
+    font-size: .95rem;
+  }
+  .callout .icon { font-size: 1.3rem; flex-shrink: 0; margin-top: 1px; }
+  .callout-info { background: var(--info-bg); border-left: 4px solid var(--info); }
+  .callout-success { background: var(--success-bg); border-left: 4px solid var(--success); }
+  .callout-warning { background: var(--warning-bg); border-left: 4px solid var(--warning); }
+  .callout-danger { background: var(--danger-bg); border-left: 4px solid var(--danger); }
+
+  /* ===== Code Blocks ===== */
+  pre {
+    background: var(--gray-900);
+    color: #e5e7eb;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    overflow-x: auto;
+    font-size: .85rem;
+    line-height: 1.6;
+    margin: 1rem 0;
+    position: relative;
+  }
+  pre .label {
+    position: absolute;
+    top: .5rem;
+    right: .75rem;
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--gray-400);
+    font-weight: 600;
+  }
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace;
+  }
+  :not(pre) > code {
+    background: var(--primary-lighter);
+    color: var(--primary-dark);
+    padding: .15em .4em;
+    border-radius: 4px;
+    font-size: .9em;
+  }
+
+  /* Syntax highlighting */
+  .kw { color: #c084fc; }
+  .str { color: #86efac; }
+  .cm { color: #6b7280; font-style: italic; }
+  .fn { color: #93c5fd; }
+  .num { color: #fbbf24; }
+  .type { color: #67e8f9; }
+  .op { color: #f9a8d4; }
+  .param { color: #fdba74; }
+
+  /* ===== Step Counter ===== */
+  .steps { counter-reset: step-counter; }
+  .step {
+    counter-increment: step-counter;
+    position: relative;
+    padding-left: 3.5rem;
+    margin-bottom: 2rem;
+    min-height: 2.5rem;
+  }
+  .step::before {
+    content: counter(step-counter);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 2.25rem;
+    height: 2.25rem;
+    background: var(--primary);
+    color: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: .95rem;
+  }
+  .step h3 { margin-top: 0; }
+
+  /* ===== Tables ===== */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: .92rem;
+  }
+  th, td {
+    padding: .65rem .85rem;
+    text-align: left;
+    border-bottom: 1px solid var(--gray-200);
+  }
+  th {
+    background: var(--primary-lighter);
+    color: var(--primary-dark);
+    font-weight: 600;
+    font-size: .85rem;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+  tr:hover td { background: var(--gray-50); }
+
+  /* ===== Architecture Diagram ===== */
+  .arch-diagram {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .35rem;
+    margin: 1.5rem 0;
+    padding: 1.5rem 1rem;
+    background: var(--gray-50);
+    border-radius: var(--radius);
+    border: 1px solid var(--gray-200);
+  }
+  .arch-row {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .arch-box {
+    padding: .55rem 1rem;
+    border-radius: 8px;
+    font-size: .82rem;
+    font-weight: 600;
+    text-align: center;
+    min-width: 110px;
+    border: 2px solid;
+  }
+  .arch-telegram { background: #dbeafe; border-color: #3b82f6; color: #1e40af; }
+  .arch-nanoclaw { background: var(--primary-light); border-color: var(--primary); color: var(--primary-dark); }
+  .arch-container { background: #fae8ff; border-color: #a855f7; color: #7e22ce; }
+  .arch-skills { background: #dcfce7; border-color: #22c55e; color: #166534; }
+  .arch-workspace { background: #fff7ed; border-color: #f97316; color: #9a3412; }
+  .arch-ipc { background: #fef3c7; border-color: #d97706; color: #92400e; }
+  .arch-mcp { background: #fce7f3; border-color: #ec4899; color: #9d174d; }
+  .arch-arrow {
+    font-size: 1.2rem;
+    color: var(--gray-400);
+    line-height: 1;
+  }
+  .arch-arrow-down { display: block; text-align: center; }
+  .arch-arrow-right { display: inline; }
+  .arch-label {
+    font-size: .7rem;
+    color: var(--gray-500);
+    text-align: center;
+    font-style: italic;
+  }
+
+  /* ===== Folder tree ===== */
+  .folder-tree {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: .82rem;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    line-height: 1.8;
+    color: var(--gray-700);
+    margin: 1rem 0;
+  }
+  .folder-tree .dir { color: var(--primary); font-weight: 600; }
+  .folder-tree .file { color: var(--gray-600); }
+  .folder-tree .desc { color: var(--gray-400); font-style: italic; }
+
+  /* ===== Chat Mockup ===== */
+  .chat-mockup {
+    background: #e5ddd5;
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin: 1rem 0;
+    max-width: 500px;
+  }
+  .chat-bubble {
+    padding: .65rem 1rem;
+    border-radius: 8px;
+    margin-bottom: .5rem;
+    max-width: 88%;
+    font-size: .88rem;
+    line-height: 1.5;
+    position: relative;
+    word-break: break-word;
+  }
+  .chat-bubble.user {
+    background: #dcf8c6;
+    margin-left: auto;
+    border-top-right-radius: 2px;
+  }
+  .chat-bubble.bot {
+    background: #fff;
+    margin-right: auto;
+    border-top-left-radius: 2px;
+  }
+  .chat-sender {
+    font-size: .75rem;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .chat-sender.user-name { color: #075e54; }
+  .chat-sender.bot-name { color: var(--primary); }
+
+  /* ===== Approach Toggle ===== */
+  .approach-tabs {
+    display: flex;
+    gap: 0;
+    margin: 1.25rem 0 0;
+    border-bottom: 2px solid var(--gray-200);
+  }
+  .approach-tab {
+    padding: .6rem 1.25rem;
+    font-size: .9rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--gray-500);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color .15s, border-color .15s;
+  }
+  .approach-tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+  }
+  .approach-tab:hover { color: var(--primary-dark); }
+  .approach-content { display: none; padding-top: 1rem; }
+  .approach-content.active { display: block; }
+
+  /* ===== Difficulty Badge ===== */
+  .difficulty {
+    display: inline-block;
+    padding: .15rem .6rem;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 600;
+    letter-spacing: .03em;
+    vertical-align: middle;
+    margin-left: .5rem;
+  }
+  .difficulty-easy { background: var(--success-bg); color: var(--success); border: 1px solid var(--success); }
+  .difficulty-medium { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning); }
+  .difficulty-hard { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }
+
+  /* ===== Footer ===== */
+  .footer {
+    text-align: center;
+    padding: 2rem 0;
+    color: var(--gray-400);
+    font-size: .85rem;
+  }
+
+  /* ===== Print ===== */
+  @media print {
+    body { background: #fff; font-size: 11pt; }
+    .page-wrapper { max-width: 100%; padding: 0; }
+    .hero { background: var(--primary) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; break-inside: avoid; }
+    .section { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+    .print-btn { display: none !important; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+    .toc { break-inside: avoid; }
+    .callout { break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .chat-mockup { break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .arch-diagram { break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    a { color: var(--primary) !important; text-decoration: none !important; }
+    .approach-content { display: block !important; }
+    .approach-tabs { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-wrapper">
+
+  <!-- Print Button -->
+  <button class="print-btn" onclick="window.print()">&#x1F5A8;&#xFE0F; Save as PDF</button>
+
+  <!-- Hero -->
+  <div class="hero">
+    <span class="badge">NanoClaw User Guide</span>
+    <h1>TataNano: Extending Your AI Assistant</h1>
+    <p class="subtitle">A practical, step-by-step guide for adding new capabilities &mdash; no terminal required.</p>
+  </div>
+
+  <!-- Table of Contents -->
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#intro">Introduction &mdash; What is TataNano?</a></li>
+      <li><a href="#architecture">How TataNano Works (Architecture Overview)</a></li>
+      <li><a href="#skills">How Skills Work</a></li>
+      <li><a href="#worked-example">Worked Example: Adding a &ldquo;Send PDF&rdquo; Skill</a></li>
+      <li><a href="#general-guide">General Guide: Adding Any New Skill</a></li>
+      <li><a href="#tips">Tips &amp; Best Practices</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+      <li><a href="#reference">Quick Reference</a></li>
+    </ol>
+  </nav>
+
+  <!-- ============================================================ -->
+  <!-- Section 1: Introduction -->
+  <!-- ============================================================ -->
+  <section class="section" id="intro">
+    <h2>1. Introduction &mdash; What is TataNano?</h2>
+    <p>
+      <strong>TataNano</strong> is your personal AI assistant powered by <strong>NanoClaw</strong> &mdash; an open-source platform that connects Claude (Anthropic's AI) to messaging apps like Telegram. It runs on your Mac Mini inside Docker, and you interact with it entirely through Telegram chat.
+    </p>
+    <p>Think of it this way:</p>
+    <ul>
+      <li><strong>Telegram</strong> is how you talk to TataNano (the &ldquo;front door&rdquo;)</li>
+      <li><strong>NanoClaw</strong> is the engine that processes your messages and runs Claude</li>
+      <li><strong>Skills</strong> are plug-in capabilities that teach TataNano new tricks</li>
+    </ul>
+
+    <div class="callout callout-info">
+      <span class="icon">&#x1F4A1;</span>
+      <div>
+        <strong>Key insight:</strong> TataNano can modify its own files and install new skills when you ask it to. You don't need terminal access or coding knowledge &mdash; you can extend it through conversation.
+      </div>
+    </div>
+
+    <h3>What can TataNano do out of the box?</h3>
+    <ul>
+      <li>Answer questions and have conversations</li>
+      <li>Search the web and fetch content from URLs</li>
+      <li>Browse websites with a built-in browser (click, fill forms, take screenshots)</li>
+      <li>Read and write files in its workspace</li>
+      <li>Run bash commands in its sandboxed environment</li>
+      <li>Schedule tasks (reminders, recurring checks)</li>
+      <li>Remember things across conversations</li>
+    </ul>
+
+    <h3>What can it learn to do?</h3>
+    <p>
+      Anything you can describe! By adding <strong>skills</strong>, TataNano can learn to send files, generate reports, interact with APIs, automate workflows, and much more. This guide walks you through the process with a real example.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Section 2: Architecture -->
+  <!-- ============================================================ -->
+  <section class="section" id="architecture">
+    <h2>2. How TataNano Works (Architecture Overview)</h2>
+    <p>Here is a simplified view of how messages flow through the system:</p>
+
+    <div class="arch-diagram">
+      <div class="arch-row">
+        <div class="arch-box arch-telegram">&#x1F4F1; You (Telegram)</div>
+      </div>
+      <div class="arch-arrow arch-arrow-down">&#x2B07;&#xFE0F; message via Bot API</div>
+
+      <div class="arch-row">
+        <div class="arch-box arch-nanoclaw">&#x2699;&#xFE0F; NanoClaw Host<br><small>Node.js on Mac Mini</small></div>
+      </div>
+      <div class="arch-label">Telegram channel (<code>telegram.ts</code>) receives messages, IPC watcher (<code>ipc.ts</code>) polls for outbound</div>
+      <div class="arch-arrow arch-arrow-down">&#x2B07;&#xFE0F; spawns container</div>
+
+      <div class="arch-row">
+        <div class="arch-box arch-container">&#x1F4E6; Docker Container<br><small>Isolated Linux sandbox</small></div>
+      </div>
+      <div class="arch-label">Claude Agent SDK runs here with all tools</div>
+      <div class="arch-arrow arch-arrow-down">&#x2B07;&#xFE0F;</div>
+
+      <div class="arch-row">
+        <div class="arch-box arch-mcp">&#x1F527; MCP Server<br><small>send_message<br>schedule_task</small></div>
+        <div class="arch-box arch-skills">&#x1F9E9; Skills<br><small>SKILL.md files</small></div>
+        <div class="arch-box arch-workspace">&#x1F4C2; Workspace<br><small>/workspace/group/</small></div>
+      </div>
+      <div class="arch-arrow arch-arrow-down">&#x2B07;&#xFE0F; writes JSON to IPC</div>
+
+      <div class="arch-row">
+        <div class="arch-box arch-ipc">&#x1F4E8; IPC Directory<br><small>/workspace/ipc/</small></div>
+      </div>
+      <div class="arch-label">Host polls every 500ms, picks up messages/tasks, sends via Telegram</div>
+    </div>
+
+    <h3>The flow, step by step</h3>
+    <ol>
+      <li>You send a message in Telegram (e.g., <code>@TataNano send me a PDF of today's report</code>)</li>
+      <li>The <strong>NanoClaw host process</strong> (Node.js on your Mac Mini) receives the message via the Telegram Bot API using the <strong>grammy</strong> library</li>
+      <li>It spins up a <strong>Docker container</strong> &mdash; a safe, isolated Linux environment where Claude runs</li>
+      <li>Inside the container, Claude has access to <strong>tools</strong> (file I/O, web search, bash), <strong>skills</strong> (SKILL.md instructions), and the <strong>MCP server</strong> (NanoClaw's own tools like <code>send_message</code>)</li>
+      <li>When Claude wants to send you a reply, it calls the MCP <code>send_message</code> tool, which writes a JSON file to the <strong>IPC directory</strong></li>
+      <li>The host's <strong>IPC watcher</strong> picks up the JSON file (polling every 500ms) and sends the text through the Telegram Bot API back to your chat</li>
+    </ol>
+
+    <div class="callout callout-info">
+      <span class="icon">&#x1F512;</span>
+      <div>
+        <strong>Security note:</strong> Each conversation runs in an isolated container. TataNano cannot access your Mac Mini's files unless you explicitly mount directories. The container runs as a non-root user (<code>node</code>), and the NanoClaw source code is mounted read-only.
+      </div>
+    </div>
+
+    <h3>Key directories inside the container</h3>
+    <div class="folder-tree">
+      <span class="dir">/workspace/</span><br>
+      &nbsp;&nbsp;&#x251C;&#x2500; <span class="dir">group/</span> <span class="desc">&larr; Your working directory (read-write, persistent across sessions)</span><br>
+      &nbsp;&nbsp;&#x2502;&nbsp;&nbsp;&#x251C;&#x2500; <span class="file">conversations/</span> <span class="desc">&larr; Past conversation archives</span><br>
+      &nbsp;&nbsp;&#x2502;&nbsp;&nbsp;&#x2514;&#x2500; <span class="file">... your files ...</span><br>
+      &nbsp;&nbsp;&#x251C;&#x2500; <span class="dir">project/</span> <span class="desc">&larr; NanoClaw source code (read-only, main channel only)</span><br>
+      &nbsp;&nbsp;&#x251C;&#x2500; <span class="dir">ipc/</span> <span class="desc">&larr; Inter-process communication</span><br>
+      &nbsp;&nbsp;&#x2502;&nbsp;&nbsp;&#x251C;&#x2500; <span class="file">messages/</span> <span class="desc">&larr; Outbound messages (JSON files picked up by host)</span><br>
+      &nbsp;&nbsp;&#x2502;&nbsp;&nbsp;&#x2514;&#x2500; <span class="file">tasks/</span> <span class="desc">&larr; Task scheduling commands</span><br>
+      &nbsp;&nbsp;&#x2514;&#x2500; <span class="dir">extra/</span> <span class="desc">&larr; Additional mounted directories (if configured)</span><br>
+      <br>
+      <span class="dir">/home/node/.claude/</span><br>
+      &nbsp;&nbsp;&#x251C;&#x2500; <span class="dir">skills/</span> <span class="desc">&larr; Installed skills (SKILL.md files live here!)</span><br>
+      &nbsp;&nbsp;&#x2502;&nbsp;&nbsp;&#x251C;&#x2500; <span class="dir">agent-browser/</span> <span class="desc">&larr; Web browsing skill</span><br>
+      &nbsp;&nbsp;&#x2502;&nbsp;&nbsp;&#x251C;&#x2500; <span class="dir">capabilities/</span> <span class="desc">&larr; &ldquo;What can you do?&rdquo; skill</span><br>
+      &nbsp;&nbsp;&#x2502;&nbsp;&nbsp;&#x2514;&#x2500; <span class="dir">status/</span> <span class="desc">&larr; Health check skill</span><br>
+      &nbsp;&nbsp;&#x2514;&#x2500; <span class="file">settings.json</span> <span class="desc">&larr; Agent settings</span><br>
+      <br>
+      <span class="dir">/app/</span><br>
+      &nbsp;&nbsp;&#x251C;&#x2500; <span class="file">src/index.ts</span> <span class="desc">&larr; Agent runner (Claude Agent SDK)</span><br>
+      &nbsp;&nbsp;&#x2514;&#x2500; <span class="file">src/ipc-mcp-stdio.ts</span> <span class="desc">&larr; MCP server (exposes NanoClaw tools to Claude)</span>
+    </div>
+
+    <h3>Understanding IPC &mdash; the messaging backbone</h3>
+    <p>
+      <strong>IPC</strong> (Inter-Process Communication) is how the container talks back to the host. The pattern is simple:
+    </p>
+    <ol>
+      <li>Claude calls an MCP tool (e.g., <code>send_message</code>)</li>
+      <li>The MCP server writes a JSON file to <code>/workspace/ipc/messages/</code></li>
+      <li>The host's IPC watcher picks it up within 500ms</li>
+      <li>The host routes it to the right channel (Telegram, WhatsApp, etc.)</li>
+    </ol>
+    <p>This is important to understand because when we add new capabilities (like sending files), they follow this same IPC pattern.</p>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Section 3: How Skills Work -->
+  <!-- ============================================================ -->
+  <section class="section" id="skills">
+    <h2>3. How Skills Work</h2>
+    <p>
+      A <strong>skill</strong> is simply a text file (<code>SKILL.md</code>) placed in the right directory. It tells Claude <em>how</em> to perform a specific task, what tools it is allowed to use, and what steps to follow. Think of it like a recipe card &mdash; Claude reads the instructions and follows them.
+    </p>
+
+    <div class="callout callout-success">
+      <span class="icon">&#x2705;</span>
+      <div>
+        <strong>No compilation needed!</strong> Skills are just markdown files. No build step, no restart, no complex configuration. Write the file, and Claude discovers it automatically at the start of the next session.
+      </div>
+    </div>
+
+    <h3>Anatomy of a skill file</h3>
+    <p>Each skill is a folder inside <code>/home/node/.claude/skills/</code> containing a <code>SKILL.md</code> file:</p>
+
+    <div class="folder-tree">
+      <span class="dir">/home/node/.claude/skills/</span><br>
+      &nbsp;&nbsp;&#x2514;&#x2500; <span class="dir">my-skill-name/</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#x2514;&#x2500; <span class="file">SKILL.md</span> <span class="desc">&larr; The skill definition</span>
+    </div>
+
+    <p>A SKILL.md file has two parts:</p>
+
+    <h4>Part 1: Frontmatter (metadata)</h4>
+    <p>A YAML block at the top between <code>---</code> markers:</p>
+    <pre><span class="label">YAML</span><span class="cm">---</span>
+<span class="param">name</span>: my-skill-name
+<span class="param">description</span>: <span class="str">A short description of what this skill does.
+  Claude uses this to decide when to activate the skill.</span>
+<span class="param">allowed-tools</span>: <span class="str">Bash(my-tool:*)</span>  <span class="cm"># optional - extra tool permissions</span>
+<span class="cm">---</span></pre>
+
+    <table>
+      <thead><tr><th>Field</th><th>Required?</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>name</code></td><td>Yes</td><td>Unique identifier (lowercase, hyphens). Also the <code>/command</code> name.</td></tr>
+        <tr><td><code>description</code></td><td>Yes</td><td>Tells Claude <em>when</em> to use this skill. Be specific about trigger conditions.</td></tr>
+        <tr><td><code>allowed-tools</code></td><td>No</td><td>Grants extra tool permissions (e.g., specific bash commands).</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Part 2: Instructions (body)</h4>
+    <p>Markdown text that tells Claude exactly what to do. This can include step-by-step instructions, code templates, bash commands, examples, and rules. The more specific you are, the better Claude will follow the instructions.</p>
+
+    <h3>How Claude discovers and uses skills</h3>
+    <p>When Claude starts a session, it scans <code>/home/node/.claude/skills/</code> for skill folders. Each skill's <code>description</code> field helps Claude decide when to use it:</p>
+    <ul>
+      <li>If you say &ldquo;browse this website,&rdquo; Claude matches that to the <code>agent-browser</code> skill</li>
+      <li>If you say &ldquo;what can you do,&rdquo; Claude matches that to the <code>capabilities</code> skill</li>
+      <li>You can also invoke a skill directly by typing its name as a slash command: <code>/my-skill-name</code></li>
+    </ul>
+
+    <h3>Currently installed skills</h3>
+    <table>
+      <thead>
+        <tr><th>Skill</th><th>Command</th><th>What it does</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>agent-browser</strong></td>
+          <td><code>/agent-browser</code></td>
+          <td>Browse the web &mdash; open pages, click buttons, fill forms, take screenshots, generate PDFs</td>
+        </tr>
+        <tr>
+          <td><strong>capabilities</strong></td>
+          <td><code>/capabilities</code></td>
+          <td>Show what TataNano can do (installed skills, tools, system info)</td>
+        </tr>
+        <tr>
+          <td><strong>status</strong></td>
+          <td><code>/status</code></td>
+          <td>Quick health check (session, workspace, scheduled tasks)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Section 4: Worked Example -->
+  <!-- ============================================================ -->
+  <section class="section" id="worked-example">
+    <h2>4. Worked Example: Adding a &ldquo;Send PDF&rdquo; Skill</h2>
+    <p>
+      Let's walk through a complete, real example: adding a skill that lets TataNano send PDF files directly in your Telegram chat. We'll cover two approaches &mdash; pick the one that suits your comfort level.
+    </p>
+
+    <h3>What we're building</h3>
+    <p>A skill that allows TataNano to:</p>
+    <ul>
+      <li>Generate a PDF from any content (web page, HTML, text)</li>
+      <li>Send it as a document attachment in your Telegram chat</li>
+      <li>Respond to requests like &ldquo;Send me a PDF of this article&rdquo; or &ldquo;Create a PDF report&rdquo;</li>
+    </ul>
+
+    <h3>Choose your approach</h3>
+
+    <div class="approach-tabs">
+      <button class="approach-tab active" onclick="switchApproach('simple')">
+        Approach A: Skill Only <span class="difficulty difficulty-easy">EASY</span>
+      </button>
+      <button class="approach-tab" onclick="switchApproach('advanced')">
+        Approach B: Full IPC Integration <span class="difficulty difficulty-medium">ADVANCED</span>
+      </button>
+    </div>
+
+    <!-- ===== APPROACH A: Simple ===== -->
+    <div class="approach-content active" id="approach-simple">
+      <div class="callout callout-success">
+        <span class="icon">&#x2705;</span>
+        <div>
+          <strong>Recommended for Bartek.</strong> This approach requires no code changes to NanoClaw &mdash; just creating a single SKILL.md file. TataNano uses its built-in <code>agent-browser</code> tool to generate PDFs and <code>curl</code> to send them via the Telegram Bot API.
+        </div>
+      </div>
+
+      <h4>The complete SKILL.md</h4>
+      <pre><span class="label">SKILL.md</span>---
+name: send-pdf
+description: Send PDF files or documents via Telegram chat. Use when the user
+  asks to send a PDF, create a PDF document, export something as PDF, share a
+  file as a document, or generate a printable version of content.
+allowed-tools: Bash(agent-browser:*) Bash(curl:*)
+---
+
+# Send PDF via Telegram
+
+Generate PDFs and send them as document attachments in the Telegram chat.
+
+## Step 1: Generate the PDF
+
+Use `agent-browser` to create a PDF. Two options:
+
+### From a URL:
+```bash
+agent-browser open "https://example.com/page"
+agent-browser wait --load networkidle
+agent-browser pdf /tmp/output.pdf
+agent-browser close
+```
+
+### From custom HTML content:
+Write the content to a temporary HTML file, then render it:
+```bash
+cat &lt;&lt;'HTMLEOF' &gt; /tmp/content.html
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;&lt;style&gt;
+  body { font-family: -apple-system, sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto; }
+  h1 { color: #1a1a1a; } p { line-height: 1.6; }
+&lt;/style&gt;&lt;/head&gt;
+&lt;body&gt;
+  &lt;h1&gt;Report Title&lt;/h1&gt;
+  &lt;p&gt;Your content here...&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+HTMLEOF
+
+agent-browser open "file:///tmp/content.html"
+agent-browser pdf /tmp/output.pdf
+agent-browser close
+```
+
+## Step 2: Send via Telegram Bot API
+
+Use curl to send the PDF as a document using the Telegram sendDocument API.
+
+The bot token is in the NanoClaw environment. The chat ID is available from
+the NANOCLAW_CHAT_JID environment variable (format: "tg:-1001234567890").
+
+```bash
+# Get the numeric chat ID (strip the "tg:" prefix)
+CHAT_ID=$(echo "$NANOCLAW_CHAT_JID" | sed 's/^tg://')
+
+# Send the document
+curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+  -F "chat_id=${CHAT_ID}" \
+  -F "document=@/tmp/output.pdf" \
+  -F "caption=Here is your PDF document" \
+  -F "parse_mode=Markdown"
+```
+
+## Step 3: Clean up
+
+```bash
+rm -f /tmp/output.pdf /tmp/content.html
+```
+
+## Important Rules
+
+- Always wait for the page to fully load before generating the PDF
+  (`agent-browser wait --load networkidle`)
+- Telegram has a **50 MB file size limit** for documents
+- If the bot token is not available in the environment, inform the user:
+  "I need the Telegram bot token to send files. Please ask your admin
+  to set TELEGRAM_BOT_TOKEN in the NanoClaw environment."
+- Always clean up temporary files after sending
+- For existing files in the workspace, skip generation and go straight
+  to the curl command with the file path
+- Use a descriptive caption that tells the user what the PDF contains
+
+## Sending an Existing File
+
+If the user already has a file (PDF, DOCX, ZIP, etc.) in the workspace:
+
+```bash
+CHAT_ID=$(echo "$NANOCLAW_CHAT_JID" | sed 's/^tg://')
+curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+  -F "chat_id=${CHAT_ID}" \
+  -F "document=@/workspace/group/path/to/file.pdf" \
+  -F "caption=Your requested file"
+```</pre>
+
+      <h4>How to deploy this skill</h4>
+
+      <div class="callout callout-warning">
+        <span class="icon">&#x26A0;&#xFE0F;</span>
+        <div>
+          <strong>No terminal needed!</strong> TataNano can create its own skill files. It has write access to <code>/home/node/.claude/skills/</code> inside the container.
+        </div>
+      </div>
+
+      <p><strong>Option 1: Ask TataNano to install it (recommended)</strong></p>
+      <p>Simply send the following message in Telegram. You can copy-paste it as-is:</p>
+
+      <div class="chat-mockup">
+        <div class="chat-bubble user">
+          <div class="chat-sender user-name">Bartek</div>
+          Please create a new skill for sending PDF files. Create the directory /home/node/.claude/skills/send-pdf/ and write a SKILL.md file inside it with the following content:
+
+[paste the SKILL.md content from above]
+        </div>
+        <div class="chat-bubble bot">
+          <div class="chat-sender bot-name">TataNano</div>
+          Done! I've created the send-pdf skill at /home/node/.claude/skills/send-pdf/SKILL.md. You can try it by asking me to send a PDF of any webpage.
+        </div>
+      </div>
+
+      <div class="callout callout-info">
+        <span class="icon">&#x1F4A1;</span>
+        <div>
+          <strong>Even simpler:</strong> You can describe what you want in plain language and let TataNano write the SKILL.md itself. For example: <em>&ldquo;I want you to be able to send PDF files in our chat. Create a skill that generates PDFs with agent-browser and sends them using curl and the Telegram sendDocument API. Save it in your skills directory.&rdquo;</em>
+        </div>
+      </div>
+
+      <p><strong>Option 2: Use Docker Desktop's file manager</strong></p>
+      <div class="steps">
+        <div class="step">
+          <h3>Open Docker Desktop</h3>
+          <p>On your Mac Mini, open the Docker Desktop application.</p>
+        </div>
+        <div class="step">
+          <h3>Find the NanoClaw container</h3>
+          <p>In the &ldquo;Containers&rdquo; tab, find the running NanoClaw agent container.</p>
+        </div>
+        <div class="step">
+          <h3>Navigate to the skills directory</h3>
+          <p>Click the container, go to the <strong>&ldquo;Files&rdquo;</strong> tab, navigate to <code>/home/node/.claude/skills/</code>.</p>
+        </div>
+        <div class="step">
+          <h3>Create the skill</h3>
+          <p>Create a folder called <code>send-pdf</code>, then inside it create <code>SKILL.md</code> with the content shown above.</p>
+        </div>
+      </div>
+
+      <div class="callout callout-warning">
+        <span class="icon">&#x26A0;&#xFE0F;</span>
+        <div>
+          <strong>About the bot token:</strong> For this approach to work, the <code>TELEGRAM_BOT_TOKEN</code> environment variable must be available inside the container. If TataNano reports it can't find the token, you may need to ensure it's passed through in the Docker container configuration. Ask TataNano: <em>&ldquo;Check if TELEGRAM_BOT_TOKEN is set in the environment.&rdquo;</em>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== APPROACH B: Advanced ===== -->
+    <div class="approach-content" id="approach-advanced">
+      <div class="callout callout-info">
+        <span class="icon">&#x1F527;</span>
+        <div>
+          <strong>For advanced users or future NanoClaw development.</strong> This approach adds a proper <code>send_document</code> MCP tool that works through the IPC system, just like the built-in <code>send_message</code> tool. It requires modifying three files in the NanoClaw source code.
+        </div>
+      </div>
+
+      <p>The proper way to add file sending follows the same IPC pattern that <code>send_message</code> uses. Three files need changes:</p>
+
+      <h4>Change 1: Add MCP tool in the container</h4>
+      <p>File: <code>/app/src/ipc-mcp-stdio.ts</code></p>
+      <p>Add a new <code>send_document</code> tool alongside the existing <code>send_message</code>:</p>
+      <pre><span class="label">TypeScript</span><span class="cm">// Add after the existing send_message tool definition</span>
+
+<span class="kw">server</span>.<span class="fn">tool</span>(
+  <span class="str">'send_document'</span>,
+  <span class="str">'Send a file (PDF, image, etc.) as a Telegram document attachment.'</span>,
+  {
+    <span class="param">file_path</span>: z.<span class="fn">string</span>().<span class="fn">describe</span>(<span class="str">'Absolute path to the file inside the container'</span>),
+    <span class="param">caption</span>: z.<span class="fn">string</span>().<span class="fn">optional</span>().<span class="fn">describe</span>(<span class="str">'Caption text for the document'</span>),
+  },
+  <span class="kw">async</span> (args) =&gt; {
+    <span class="kw">const</span> data = {
+      <span class="param">type</span>: <span class="str">'document'</span>,
+      <span class="param">chatJid</span>: chatJid,
+      <span class="param">filePath</span>: args.file_path,
+      <span class="param">caption</span>: args.caption || <span class="kw">undefined</span>,
+      <span class="param">groupFolder</span>: groupFolder,
+      <span class="param">timestamp</span>: <span class="kw">new</span> <span class="type">Date</span>().<span class="fn">toISOString</span>(),
+    };
+
+    <span class="fn">writeIpcFile</span>(<span class="fn">path</span>.<span class="fn">join</span>(IPC_DIR, <span class="str">'files'</span>), data);
+
+    <span class="kw">return</span> { <span class="param">content</span>: [{ <span class="param">type</span>: <span class="str">'text'</span>, <span class="param">text</span>: <span class="str">'Document queued for sending.'</span> }] };
+  },
+);</pre>
+
+      <h4>Change 2: Handle file IPC in the host watcher</h4>
+      <p>File: <code>src/ipc.ts</code> (on host)</p>
+      <p>Add a files directory handler in <code>processIpcFiles()</code>, alongside the existing messages and tasks handlers:</p>
+      <pre><span class="label">TypeScript</span><span class="cm">// Add inside the for loop, after the messages handler</span>
+
+<span class="kw">const</span> filesDir = path.<span class="fn">join</span>(ipcBaseDir, sourceGroup, <span class="str">'files'</span>);
+<span class="kw">if</span> (fs.<span class="fn">existsSync</span>(filesDir)) {
+  <span class="kw">const</span> fileEntries = fs.<span class="fn">readdirSync</span>(filesDir)
+    .<span class="fn">filter</span>(f =&gt; f.<span class="fn">endsWith</span>(<span class="str">'.json'</span>));
+  <span class="kw">for</span> (<span class="kw">const</span> file <span class="kw">of</span> fileEntries) {
+    <span class="kw">const</span> filePath = path.<span class="fn">join</span>(filesDir, file);
+    <span class="kw">const</span> data = <span class="type">JSON</span>.<span class="fn">parse</span>(fs.<span class="fn">readFileSync</span>(filePath, <span class="str">'utf-8'</span>));
+    <span class="kw">if</span> (data.type === <span class="str">'document'</span> &amp;&amp; data.chatJid &amp;&amp; data.filePath) {
+      <span class="kw">await</span> deps.<span class="fn">sendDocument</span>(data.chatJid, data.filePath, data.caption);
+    }
+    fs.<span class="fn">unlinkSync</span>(filePath);
+  }
+}</pre>
+
+      <h4>Change 3: Add sendDocument to the Telegram channel</h4>
+      <p>File: <code>src/channels/telegram.ts</code> (on host)</p>
+      <p>Add a <code>sendDocument</code> method to the <code>TelegramChannel</code> class, next to the existing <code>sendMessage</code> method:</p>
+      <pre><span class="label">TypeScript</span><span class="kw">async</span> <span class="fn">sendDocument</span>(jid: <span class="type">string</span>, filePath: <span class="type">string</span>, caption?: <span class="type">string</span>): <span class="type">Promise</span>&lt;<span class="type">void</span>&gt; {
+  <span class="kw">if</span> (!<span class="kw">this</span>.bot) {
+    logger.<span class="fn">warn</span>(<span class="str">'Telegram bot not initialized'</span>);
+    <span class="kw">return</span>;
+  }
+  <span class="kw">try</span> {
+    <span class="kw">const</span> numericId = jid.<span class="fn">replace</span>(<span class="str">/^tg:/</span>, <span class="str">''</span>);
+    <span class="kw">const</span> fileBuffer = fs.<span class="fn">readFileSync</span>(filePath);
+    <span class="kw">const</span> fileName = path.<span class="fn">basename</span>(filePath);
+    <span class="kw">const</span> inputFile = <span class="kw">new</span> <span class="type">InputFile</span>(fileBuffer, fileName);
+
+    <span class="kw">await</span> <span class="kw">this</span>.bot.api.<span class="fn">sendDocument</span>(numericId, inputFile, {
+      <span class="param">caption</span>: caption,
+      <span class="param">parse_mode</span>: <span class="str">'Markdown'</span>,
+    });
+    logger.<span class="fn">info</span>({ jid, filePath, fileName }, <span class="str">'Telegram document sent'</span>);
+  } <span class="kw">catch</span> (err) {
+    logger.<span class="fn">error</span>({ jid, filePath, err }, <span class="str">'Failed to send Telegram document'</span>);
+  }
+}</pre>
+
+      <p>This approach gives you a clean <code>mcp__nanoclaw__send_document</code> tool that any skill can use, just like <code>mcp__nanoclaw__send_message</code>. The SKILL.md would then be much simpler:</p>
+      <pre><span class="label">SKILL.md (with MCP tool)</span>---
+name: send-pdf
+description: Send PDF files or documents via Telegram. Use when the user asks
+  to send a PDF, export as PDF, or share a document file.
+---
+
+# Send PDF via Telegram
+
+Generate PDFs and send them using the `mcp__nanoclaw__send_document` tool.
+
+## Generating a PDF
+
+Use `agent-browser` to create a PDF:
+
+```bash
+agent-browser open "https://example.com"
+agent-browser wait --load networkidle
+agent-browser pdf /tmp/output.pdf
+agent-browser close
+```
+
+## Sending the PDF
+
+Use the MCP tool:
+```
+mcp__nanoclaw__send_document(
+  file_path: "/tmp/output.pdf",
+  caption: "Here is your PDF document"
+)
+```
+
+## Clean up
+```bash
+rm -f /tmp/output.pdf
+```</pre>
+
+      <div class="callout callout-warning">
+        <span class="icon">&#x26A0;&#xFE0F;</span>
+        <div>
+          <strong>Deploying host code changes requires rebuilding NanoClaw.</strong> After editing the source files, run <code>npm run build</code> and restart the NanoClaw service. This requires terminal access to the Mac Mini (or Docker Desktop's terminal feature). The skill-only approach (Approach A) avoids this entirely.
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Testing (shared) ===== -->
+    <h3>Testing the skill</h3>
+    <p>Once the skill is deployed (via either approach), test it:</p>
+
+    <div class="chat-mockup">
+      <div class="chat-bubble user">
+        <div class="chat-sender user-name">Bartek</div>
+        Send me a PDF of https://en.wikipedia.org/wiki/Tata_Nano
+      </div>
+      <div class="chat-bubble bot">
+        <div class="chat-sender bot-name">TataNano</div>
+        I'll generate a PDF of that Wikipedia article and send it to you. One moment...
+      </div>
+      <div class="chat-bubble bot">
+        <div class="chat-sender bot-name">TataNano</div>
+        &#x1F4CE; <em>Tata_Nano.pdf</em> (sent as document)
+      </div>
+    </div>
+
+    <p>More test messages to try:</p>
+    <ul>
+      <li><em>&ldquo;Create a PDF summary of today's tech news&rdquo;</em> &mdash; tests HTML generation + PDF</li>
+      <li><em>&ldquo;Turn this into a PDF: [URL]&rdquo;</em> &mdash; tests URL-to-PDF</li>
+      <li><em>&ldquo;Send me the file at /workspace/group/report.pdf&rdquo;</em> &mdash; tests sending existing files</li>
+    </ul>
+
+    <h3>Troubleshooting the PDF skill</h3>
+    <table>
+      <thead>
+        <tr><th>Problem</th><th>Likely cause</th><th>Solution</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>TataNano doesn't use the skill</td>
+          <td>Skill not installed or not matched</td>
+          <td>Ask TataNano: <em>&ldquo;Read the file at /home/node/.claude/skills/send-pdf/SKILL.md&rdquo;</em> to verify it exists. Also try invoking directly: <em>&ldquo;/send-pdf generate a test PDF&rdquo;</em></td>
+        </tr>
+        <tr>
+          <td>PDF is generated but not sent</td>
+          <td>Bot token not in environment</td>
+          <td>Ask TataNano: <em>&ldquo;echo $TELEGRAM_BOT_TOKEN&rdquo;</em> to check. If empty, the token needs to be added to the container's environment configuration.</td>
+        </tr>
+        <tr>
+          <td>PDF is blank or broken</td>
+          <td>Page didn't fully load</td>
+          <td>Edit the skill to add a longer wait: <code>agent-browser wait --load networkidle</code> or <code>agent-browser wait 3000</code></td>
+        </tr>
+        <tr>
+          <td>&ldquo;File too large&rdquo; error</td>
+          <td>Telegram 50 MB limit</td>
+          <td>Ask TataNano to compress the PDF or generate a shorter version</td>
+        </tr>
+        <tr>
+          <td>curl returns an error</td>
+          <td>Invalid chat ID format</td>
+          <td>The NANOCLAW_CHAT_JID uses <code>tg:</code> prefix which must be stripped. Ask TataNano to check the curl command output.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Section 5: General Guide -->
+  <!-- ============================================================ -->
+  <section class="section" id="general-guide">
+    <h2>5. General Guide: Adding Any New Skill</h2>
+    <p>Now that you've seen the PDF example, here's the general pattern for adding any skill to TataNano.</p>
+
+    <div class="steps">
+      <div class="step">
+        <h3>Define what the skill should do</h3>
+        <p>Write a clear description: What triggers it? What tools does it need? What's the expected output? The clearer you are, the better Claude will follow the instructions.</p>
+      </div>
+
+      <div class="step">
+        <h3>Write the SKILL.md file</h3>
+        <p>Follow this template:</p>
+        <pre><span class="label">Template</span>---
+name: your-skill-name
+description: When should Claude use this skill?
+  Be specific about trigger phrases and conditions.
+allowed-tools: Bash(tool:*)  # optional
+---
+
+# Skill Title
+
+Brief explanation of what this skill does.
+
+## Steps
+
+1. First, do this...
+2. Then, do that...
+3. Finally, return the result.
+
+## Examples
+
+Show Claude what good input/output looks like.
+
+## Error Handling
+
+What to do when something goes wrong.</pre>
+      </div>
+
+      <div class="step">
+        <h3>Deploy the skill</h3>
+        <p>The easiest way &mdash; just ask TataNano via Telegram:</p>
+        <pre><span class="label">Send in Telegram</span>Create a new skill. Make a folder at
+/home/node/.claude/skills/your-skill-name/
+and write this SKILL.md file inside it:
+
+[your SKILL.md content]</pre>
+        <p>Or describe it in plain language and let TataNano write the SKILL.md for you!</p>
+      </div>
+
+      <div class="step">
+        <h3>Test it</h3>
+        <p>Send a message that should trigger the skill. If it doesn't work, check:</p>
+        <ul>
+          <li>Does the file exist? (<em>&ldquo;List the contents of /home/node/.claude/skills/&rdquo;</em>)</li>
+          <li>Is the description matching? Try invoking directly: <em>&ldquo;/your-skill-name test&rdquo;</em></li>
+          <li>Are the instructions clear enough? Read the file and refine.</li>
+        </ul>
+      </div>
+
+      <div class="step">
+        <h3>Iterate and improve</h3>
+        <p>Skills are just text files &mdash; ask TataNano to edit them anytime: <em>&ldquo;Update the send-pdf skill to also support sending images.&rdquo;</em></p>
+      </div>
+    </div>
+
+    <h3>Skill ideas to try</h3>
+    <table>
+      <thead>
+        <tr><th>Skill name</th><th>Description</th><th>Key tools needed</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>send-photo</strong></td>
+          <td>Send screenshots or images in Telegram</td>
+          <td><code>agent-browser screenshot</code>, <code>curl</code> + Telegram <code>sendPhoto</code></td>
+        </tr>
+        <tr>
+          <td><strong>daily-digest</strong></td>
+          <td>Generate a morning news or weather summary</td>
+          <td><code>WebSearch</code>, <code>schedule_task</code></td>
+        </tr>
+        <tr>
+          <td><strong>translate</strong></td>
+          <td>Translate text or documents</td>
+          <td>Claude's built-in language capabilities</td>
+        </tr>
+        <tr>
+          <td><strong>expense-tracker</strong></td>
+          <td>Log expenses from chat messages to a CSV</td>
+          <td><code>Read</code>, <code>Write</code> (to workspace files)</td>
+        </tr>
+        <tr>
+          <td><strong>screenshot-site</strong></td>
+          <td>Take and send screenshots of web pages</td>
+          <td><code>agent-browser</code>, <code>curl</code> + Telegram <code>sendPhoto</code></td>
+        </tr>
+        <tr>
+          <td><strong>bookmark-manager</strong></td>
+          <td>Save and search bookmarks</td>
+          <td><code>Read</code>, <code>Write</code>, <code>Grep</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Available tools for skills</h3>
+    <p>Every skill has access to Claude's full tool set. Here are the most useful ones:</p>
+    <table>
+      <thead>
+        <tr><th>Tool</th><th>What it does</th><th>Example use</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>Bash</code></td><td>Run any shell command</td><td>curl, file processing, agent-browser</td></tr>
+        <tr><td><code>Read / Write / Edit</code></td><td>File operations</td><td>Read data, save results, update configs</td></tr>
+        <tr><td><code>WebSearch</code></td><td>Search the web</td><td>Find current information</td></tr>
+        <tr><td><code>WebFetch</code></td><td>Fetch a URL's content</td><td>Read articles, get API data</td></tr>
+        <tr><td><code>mcp__nanoclaw__send_message</code></td><td>Send text to Telegram</td><td>Progress updates, results</td></tr>
+        <tr><td><code>mcp__nanoclaw__schedule_task</code></td><td>Schedule future/recurring tasks</td><td>Daily reports, reminders</td></tr>
+        <tr><td><code>agent-browser</code></td><td>Full browser automation</td><td>Screenshots, PDFs, form filling</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Section 6: Tips & Best Practices -->
+  <!-- ============================================================ -->
+  <section class="section" id="tips">
+    <h2>6. Tips &amp; Best Practices</h2>
+
+    <h3>Writing good skills</h3>
+    <ul>
+      <li><strong>Be specific in the description</strong> &mdash; include trigger phrases like &ldquo;Use when the user asks to...&rdquo;. Claude relies on this to decide when to activate the skill.</li>
+      <li><strong>Include concrete examples</strong> &mdash; showing Claude a complete bash command or workflow is more effective than describing it abstractly.</li>
+      <li><strong>One skill, one job</strong> &mdash; a focused skill is more reliable than one that tries to do everything.</li>
+      <li><strong>Add error handling</strong> &mdash; tell Claude what to say when things go wrong (e.g., &ldquo;If the file doesn't exist, tell the user.&rdquo;).</li>
+      <li><strong>Start simple, iterate</strong> &mdash; get a basic version working first, then ask TataNano to improve it.</li>
+    </ul>
+
+    <h3>Managing TataNano via Telegram</h3>
+    <table>
+      <thead><tr><th>What you want to do</th><th>What to send in Telegram</th></tr></thead>
+      <tbody>
+        <tr><td>See installed skills</td><td><code>/capabilities</code> or <em>&ldquo;List files in /home/node/.claude/skills/&rdquo;</em></td></tr>
+        <tr><td>Read a skill's code</td><td><em>&ldquo;Show me /home/node/.claude/skills/send-pdf/SKILL.md&rdquo;</em></td></tr>
+        <tr><td>Edit a skill</td><td><em>&ldquo;Update the send-pdf skill to add a wait step before generating&rdquo;</em></td></tr>
+        <tr><td>Delete a skill</td><td><em>&ldquo;Delete the folder /home/node/.claude/skills/old-skill/&rdquo;</em></td></tr>
+        <tr><td>Back up skills</td><td><em>&ldquo;Copy all skill files to /workspace/group/skill-backups/&rdquo;</em></td></tr>
+        <tr><td>System health check</td><td><code>/status</code></td></tr>
+        <tr><td>See workspace files</td><td><em>&ldquo;What files are in /workspace/group/?&rdquo;</em></td></tr>
+        <tr><td>Check scheduled tasks</td><td><em>&ldquo;List my scheduled tasks&rdquo;</em></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Telegram Bot API cheat sheet</h3>
+    <p>When building skills that send media via Telegram, these are the key API methods:</p>
+    <table>
+      <thead>
+        <tr><th>Method</th><th>What it sends</th><th>curl flag for content</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>sendDocument</code></td><td>Any file (PDF, ZIP, DOCX, etc.)</td><td><code>-F "document=@file"</code></td></tr>
+        <tr><td><code>sendPhoto</code></td><td>Image</td><td><code>-F "photo=@image.png"</code></td></tr>
+        <tr><td><code>sendAudio</code></td><td>Audio file</td><td><code>-F "audio=@song.mp3"</code></td></tr>
+        <tr><td><code>sendVideo</code></td><td>Video file</td><td><code>-F "video=@clip.mp4"</code></td></tr>
+        <tr><td><code>sendVoice</code></td><td>Voice message (OGG)</td><td><code>-F "voice=@voice.ogg"</code></td></tr>
+        <tr><td><code>sendLocation</code></td><td>Map pin</td><td><code>-F "latitude=52.23" -F "longitude=21.01"</code></td></tr>
+      </tbody>
+    </table>
+    <p>URL pattern: <code>https://api.telegram.org/bot{TOKEN}/{METHOD}</code></p>
+    <p>Common parameters: <code>chat_id</code> (required), <code>caption</code> (optional), <code>parse_mode</code> (optional: <code>Markdown</code> or <code>HTML</code>)</p>
+
+    <h3>Skill persistence and backups</h3>
+    <div class="callout callout-warning">
+      <span class="icon">&#x26A0;&#xFE0F;</span>
+      <div>
+        <strong>Skills persist across restarts</strong> because the skills directory is mounted from your Mac Mini's filesystem. However, if you ever reinstall NanoClaw or rebuild the container from scratch, custom skills could be lost. Keep backups in <code>/workspace/group/skill-backups/</code> &mdash; that directory always persists.
+      </div>
+    </div>
+    <p>Ask TataNano periodically: <em>&ldquo;Back up all my custom skills to /workspace/group/skill-backups/&rdquo;</em></p>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Section 7: Troubleshooting -->
+  <!-- ============================================================ -->
+  <section class="section" id="troubleshooting">
+    <h2>7. Troubleshooting</h2>
+
+    <div class="callout callout-danger">
+      <span class="icon">&#x274C;</span>
+      <div>
+        <strong>&ldquo;Skill not found&rdquo; or TataNano ignores the skill</strong>
+        <ul style="margin-top:.5rem">
+          <li>Verify the file exists: ask <em>&ldquo;Read /home/node/.claude/skills/skill-name/SKILL.md&rdquo;</em></li>
+          <li>Check the folder structure: must be <code>skills/skill-name/SKILL.md</code> (not <code>skills/SKILL.md</code>)</li>
+          <li>Ensure the <code>description</code> field matches your request type</li>
+          <li>Try invoking directly: <code>/skill-name</code></li>
+          <li>Skills are discovered at session start &mdash; a new message (new session) may be needed</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout callout-danger">
+      <span class="icon">&#x274C;</span>
+      <div>
+        <strong>Skill worked before but stopped working</strong>
+        <ul style="margin-top:.5rem">
+          <li>Check if the file still exists (it may have been lost during a container rebuild)</li>
+          <li>Restore from backup: <em>&ldquo;Copy /workspace/group/skill-backups/send-pdf/SKILL.md to /home/node/.claude/skills/send-pdf/SKILL.md&rdquo;</em></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout callout-danger">
+      <span class="icon">&#x274C;</span>
+      <div>
+        <strong>TataNano is not responding at all</strong>
+        <ul style="margin-top:.5rem">
+          <li>Check that Docker Desktop is running on your Mac Mini</li>
+          <li>Check the NanoClaw container is running (green status in Docker Desktop)</li>
+          <li>Restart: in Docker Desktop, click the container and hit &ldquo;Restart&rdquo;</li>
+          <li>Check logs: Docker Desktop &rarr; container &rarr; &ldquo;Logs&rdquo; tab</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout callout-danger">
+      <span class="icon">&#x274C;</span>
+      <div>
+        <strong>Bot token issues</strong>
+        <ul style="margin-top:.5rem">
+          <li>Ask TataNano: <em>&ldquo;Run: echo $TELEGRAM_BOT_TOKEN | head -c 10&rdquo;</em> (shows first 10 chars to confirm it's set without exposing the full token)</li>
+          <li>Verify the token is valid: <code>curl https://api.telegram.org/bot{TOKEN}/getMe</code></li>
+          <li>If missing, the token needs to be added to the NanoClaw environment configuration on your Mac Mini</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Diagnostic commands via Telegram</h3>
+    <table>
+      <thead>
+        <tr><th>Command</th><th>What it checks</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>/status</code></td><td>Overall system health</td></tr>
+        <tr><td><code>/capabilities</code></td><td>Installed skills and available tools</td></tr>
+        <tr><td><em>&ldquo;List files in /home/node/.claude/skills/&rdquo;</em></td><td>What skills are installed</td></tr>
+        <tr><td><em>&ldquo;Read /home/node/.claude/skills/send-pdf/SKILL.md&rdquo;</em></td><td>Verify skill file contents</td></tr>
+        <tr><td><em>&ldquo;which agent-browser&rdquo;</em></td><td>Browser tool availability</td></tr>
+        <tr><td><em>&ldquo;ls /workspace/group/&rdquo;</em></td><td>Workspace contents</td></tr>
+        <tr><td><em>&ldquo;echo $NANOCLAW_CHAT_JID&rdquo;</em></td><td>Current chat ID (for debugging)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Section 8: Quick Reference -->
+  <!-- ============================================================ -->
+  <section class="section" id="reference">
+    <h2>8. Quick Reference</h2>
+
+    <h3>Key paths</h3>
+    <table>
+      <thead>
+        <tr><th>Path (inside container)</th><th>Purpose</th><th>Persists?</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>/home/node/.claude/skills/</code></td>
+          <td>Installed skills (SKILL.md files)</td>
+          <td>Yes (host-mounted)</td>
+        </tr>
+        <tr>
+          <td><code>/workspace/group/</code></td>
+          <td>Your working directory (files, notes, backups)</td>
+          <td>Yes (host-mounted)</td>
+        </tr>
+        <tr>
+          <td><code>/workspace/project/</code></td>
+          <td>NanoClaw source code (read-only, main only)</td>
+          <td>Yes (host-mounted)</td>
+        </tr>
+        <tr>
+          <td><code>/workspace/ipc/</code></td>
+          <td>IPC: messages, tasks, files</td>
+          <td>Per-session</td>
+        </tr>
+        <tr>
+          <td><code>/tmp/</code></td>
+          <td>Temporary files (scratch space)</td>
+          <td>No</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>NanoClaw MCP tools</h3>
+    <table>
+      <thead>
+        <tr><th>Tool</th><th>What it does</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>mcp__nanoclaw__send_message</code></td><td>Send a text message to the Telegram chat</td></tr>
+        <tr><td><code>mcp__nanoclaw__schedule_task</code></td><td>Schedule a one-time or recurring task</td></tr>
+        <tr><td><code>mcp__nanoclaw__list_tasks</code></td><td>List all scheduled tasks</td></tr>
+        <tr><td><code>mcp__nanoclaw__pause_task</code></td><td>Pause a scheduled task</td></tr>
+        <tr><td><code>mcp__nanoclaw__resume_task</code></td><td>Resume a paused task</td></tr>
+        <tr><td><code>mcp__nanoclaw__cancel_task</code></td><td>Cancel and delete a task</td></tr>
+        <tr><td><code>mcp__nanoclaw__update_task</code></td><td>Update an existing task's schedule or prompt</td></tr>
+        <tr><td><code>mcp__nanoclaw__register_group</code></td><td>Register a new chat/group (main channel only)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Cheat sheet: Creating a skill via Telegram</h3>
+    <p>Copy, customize, and paste into Telegram:</p>
+    <pre><span class="label">Copy &amp; paste into Telegram</span>Create a new skill for me. Make a folder at
+/home/node/.claude/skills/MY-SKILL-NAME/ and write a
+SKILL.md file inside it with these contents:
+
+---
+name: MY-SKILL-NAME
+description: Describe when Claude should use this skill.
+  Include trigger phrases like "Use when the user asks to..."
+---
+
+# My Skill Title
+
+Explain what this skill does and how.
+
+## Steps
+1. First step
+2. Second step
+3. Third step
+
+## Error Handling
+If something goes wrong, tell the user what happened
+and suggest how to fix it.</pre>
+
+    <h3>Host-side files (for advanced reference)</h3>
+    <table>
+      <thead><tr><th>File (on Mac Mini)</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/channels/telegram.ts</code></td><td>Telegram bot handler (grammy library), message sending</td></tr>
+        <tr><td><code>src/ipc.ts</code></td><td>IPC watcher &mdash; polls for outbound messages/tasks every 500ms</td></tr>
+        <tr><td><code>src/index.ts</code></td><td>Main orchestrator &mdash; state management, message routing</td></tr>
+        <tr><td><code>src/container-runner.ts</code></td><td>Spawns Docker containers for agent sessions</td></tr>
+        <tr><td><code>container/agent-runner/src/index.ts</code></td><td>Container entry point &mdash; runs Claude Agent SDK</td></tr>
+        <tr><td><code>container/agent-runner/src/ipc-mcp-stdio.ts</code></td><td>MCP server inside container (defines <code>send_message</code>, etc.)</td></tr>
+        <tr><td><code>groups/{name}/CLAUDE.md</code></td><td>Per-group memory and personality config</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>TataNano User Guide &mdash; Generated March 2026</p>
+    <p>Powered by NanoClaw &amp; Claude (Anthropic)</p>
+  </footer>
+
+</div>
+
+<script>
+function switchApproach(approach) {
+  document.querySelectorAll('.approach-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.approach-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('approach-' + approach).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TataNano — Keychain Naming Convention</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f7ff; color: #1e1b4b; line-height: 1.6; }
+  .container { max-width: 860px; margin: 0 auto; padding: 40px 24px; }
+
+  header { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; border-radius: 16px; padding: 36px; margin-bottom: 32px; }
+  header h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  header p { opacity: 0.85; font-size: 15px; }
+  header .badge { display: inline-block; background: rgba(255,255,255,0.2); border-radius: 20px; padding: 4px 14px; font-size: 13px; margin-top: 12px; }
+
+  .print-btn { display: flex; justify-content: flex-end; margin-bottom: 24px; }
+  .print-btn button { background: #4f46e5; color: white; border: none; padding: 10px 22px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 600; }
+  .print-btn button:hover { background: #4338ca; }
+
+  h2 { font-size: 18px; font-weight: 700; color: #4f46e5; margin: 32px 0 14px; display: flex; align-items: center; gap: 8px; }
+  h3 { font-size: 15px; font-weight: 600; color: #374151; margin: 20px 0 10px; }
+
+  .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e5e7eb; }
+
+  .formula { background: #eef2ff; border: 2px solid #c7d2fe; border-radius: 10px; padding: 16px 20px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 16px; color: #3730a3; text-align: center; margin: 12px 0; letter-spacing: 0.5px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  thead tr { background: #4f46e5; color: white; }
+  thead th { padding: 12px 14px; text-align: left; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #f5f3ff; }
+  tbody tr:hover { background: #ede9fe; }
+  td { padding: 11px 14px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+  td.service { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; color: #4338ca; font-weight: 600; }
+  td.token { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: #6b7280; }
+
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 16px 0; display: flex; gap: 12px; align-items: flex-start; font-size: 14px; }
+  .callout.info { background: #eff6ff; border-left: 4px solid #3b82f6; }
+  .callout.success { background: #f0fdf4; border-left: 4px solid #22c55e; }
+  .callout.warning { background: #fffbeb; border-left: 4px solid #f59e0b; }
+  .callout .icon { font-size: 18px; flex-shrink: 0; }
+
+  .step { display: flex; gap: 16px; margin-bottom: 16px; align-items: flex-start; }
+  .step-num { background: #4f46e5; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; margin-top: 2px; }
+
+  code { background: #f3f4f6; padding: 2px 7px; border-radius: 4px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; color: #4338ca; }
+
+  footer { text-align: center; color: #9ca3af; font-size: 13px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
+
+  @media print {
+    .print-btn { display: none; }
+    body { background: white; }
+    .card { box-shadow: none; border: 1px solid #e5e7eb; break-inside: avoid; }
+    header { background: #4f46e5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    thead tr { background: #4f46e5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="print-btn">
+    <button onclick="window.print()">🖨️ Save as PDF</button>
+  </div>
+
+  <header>
+    <h1>🔐 TataNano Keychain Naming Convention</h1>
+    <p>Standard naming for all secrets stored in macOS Passwords app (iCloud Keychain)</p>
+    <div class="badge">📅 March 2026 · v1.0</div>
+  </header>
+
+  <!-- FORMULA -->
+  <div class="card">
+    <h2>📐 The Formula</h2>
+    <div class="formula">tatanano.{service}.{type}</div>
+    <p style="color:#6b7280; font-size:14px; text-align:center; margin-top:8px;">Always lowercase · dots as separators · no spaces · account field always <code>tatanano</code></p>
+
+    <div class="callout info" style="margin-top:16px;">
+      <span class="icon">💡</span>
+      <div>In the Passwords app: use the <strong>Service name</strong> field for the full <code>tatanano.*</code> key, and always set <strong>Account</strong> to <code>tatanano</code>. The password field holds the actual secret value.</div>
+    </div>
+  </div>
+
+  <!-- EXISTING SECRETS -->
+  <div class="card">
+    <h2>🔑 Your Existing Secrets</h2>
+    <p style="font-size:14px; color:#6b7280; margin-bottom:16px;">These are the 3 secrets currently in your <code>data/env/env</code> file. Update your Passwords app entries to match these service names exactly.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>What it is</th>
+          <th>Service Name (Passwords app)</th>
+          <th>Account</th>
+          <th>Example Value (dummy)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Claude / Anthropic API Key</strong><br><span style="color:#9ca3af;font-size:12px;">Was: CLAUDE_CODE_OAUTH_TOKEN</span></td>
+          <td class="service">tatanano.anthropic.oauth-token</td>
+          <td><code>tatanano</code></td>
+          <td class="token">sk-ant-oat01-XXXXXXXXXXXX<br>XXXXXXXXXXXXXXXXXXXXXX<br>XXXXXXXXXXXXXXXXXXXXXX-XX</td>
+        </tr>
+        <tr>
+          <td><strong>Telegram Bot Token</strong><br><span style="color:#9ca3af;font-size:12px;">Was: TELEGRAM_BOT_TOKEN</span></td>
+          <td class="service">tatanano.telegram.bot-token</td>
+          <td><code>tatanano</code></td>
+          <td class="token">7412589630:AAH_dummyTokenValueHere<br>XxXxXxXxXxXxXxXxXxXxXxX</td>
+        </tr>
+        <tr>
+          <td><strong>Telegram Bot Pool</strong><br><span style="color:#9ca3af;font-size:12px;">Was: TELEGRAM_BOT_POOL</span></td>
+          <td class="service">tatanano.telegram.bot-pool</td>
+          <td><code>tatanano</code></td>
+          <td class="token">7411111111:AAH_bot1TokenXxXxXxXxXxX,<br>7422222222:AAH_bot2TokenXxXxXxXxXxX,<br>7433333333:AAH_bot3TokenXxXxXxXxXxX</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- FUTURE SECRETS -->
+  <div class="card">
+    <h2>🚀 Future Secrets Convention</h2>
+    <p style="font-size:14px; color:#6b7280; margin-bottom:16px;">When you add new services, follow this pattern. TataNano will auto-detect entries with the <code>tatanano.*</code> prefix.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th>Service Name</th>
+          <th>Account</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>New Telegram bot (LinguaFlow)</td>
+          <td class="service">tatanano.telegram.bot.linguaflow</td>
+          <td><code>tatanano</code></td>
+        </tr>
+        <tr>
+          <td>New Telegram bot (any name)</td>
+          <td class="service">tatanano.telegram.bot.{name}</td>
+          <td><code>tatanano</code></td>
+        </tr>
+        <tr>
+          <td>OpenAI API key</td>
+          <td class="service">tatanano.openai.api-key</td>
+          <td><code>tatanano</code></td>
+        </tr>
+        <tr>
+          <td>GitHub token</td>
+          <td class="service">tatanano.github.token</td>
+          <td><code>tatanano</code></td>
+        </tr>
+        <tr>
+          <td>Any other API</td>
+          <td class="service">tatanano.{service}.{type}</td>
+          <td><code>tatanano</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- HOW TO ADD -->
+  <div class="card">
+    <h2>📱 How to Add in Passwords App</h2>
+
+    <h3>On Mac:</h3>
+    <div class="step"><div class="step-num">1</div><div>Open <strong>Passwords</strong> app (⌘Space → "Passwords")</div></div>
+    <div class="step"><div class="step-num">2</div><div>Click <strong>+</strong> to add new entry</div></div>
+    <div class="step"><div class="step-num">3</div><div>Set <strong>Website</strong> = the service name (e.g. <code>tatanano.anthropic.oauth-token</code>)</div></div>
+    <div class="step"><div class="step-num">4</div><div>Set <strong>Username</strong> = <code>tatanano</code></div></div>
+    <div class="step"><div class="step-num">5</div><div>Set <strong>Password</strong> = your actual secret value</div></div>
+
+    <h3 style="margin-top:20px;">On iPhone:</h3>
+    <div class="step"><div class="step-num">1</div><div>Open <strong>Settings</strong> → <strong>Passwords</strong></div></div>
+    <div class="step"><div class="step-num">2</div><div>Tap <strong>+</strong> → New Password</div></div>
+    <div class="step"><div class="step-num">3</div><div>Same fields: Website = service name, Username = <code>tatanano</code>, Password = secret</div></div>
+    <div class="step"><div class="step-num">4</div><div>Save → syncs to Mac in ~30-90 seconds via iCloud ☁️</div></div>
+  </div>
+
+  <!-- OFFLINE NOTE -->
+  <div class="card">
+    <h2>📴 Works Offline?</h2>
+    <div class="callout success">
+      <span class="icon">✅</span>
+      <div><strong>Yes, fully offline!</strong> iCloud Keychain stores a local encrypted copy on every device. Internet is only needed for syncing between devices. TataNano reads secrets from the local copy — no internet required.</div>
+    </div>
+  </div>
+
+  <footer>
+    TataNano · Keychain Convention v1.0 · March 2026
+  </footer>
+
+</div>
+</body>
+</html>

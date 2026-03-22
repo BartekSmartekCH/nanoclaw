@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Letter Skill + Vision — Final Implementation Plan</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Georgia', serif;
+      font-size: 15px;
+      line-height: 1.75;
+      color: #2c2c2c;
+      background: #f7f6f3;
+      padding: 40px 20px;
+    }
+    .page {
+      max-width: 860px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 30px rgba(0,0,0,0.10);
+      padding: 60px 70px;
+    }
+    .doc-header {
+      text-align: center;
+      border-bottom: 3px solid #059669;
+      padding-bottom: 30px;
+      margin-bottom: 40px;
+    }
+    .doc-header h1 { font-size: 2.2em; color: #059669; margin-bottom: 6px; }
+    .doc-header .subtitle { font-size: 1.05em; color: #888; font-style: italic; }
+    .doc-header .meta { margin-top: 12px; font-size: 0.85em; color: #aaa; }
+    h2 { font-size: 1.5em; color: #059669; margin: 40px 0 14px; padding-bottom: 6px; border-bottom: 1.5px solid #d1fae5; }
+    h3 { font-size: 1.15em; color: #065f46; margin: 26px 0 10px; }
+    p { margin-bottom: 14px; }
+    ul, ol { margin: 10px 0 16px 22px; }
+    li { margin-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; margin: 18px 0 24px; font-size: 0.93em; }
+    th { background: #ecfdf5; color: #065f46; padding: 10px 14px; text-align: left; font-weight: bold; border-bottom: 2px solid #6ee7b7; }
+    td { padding: 9px 14px; border-bottom: 1px solid #f0fdf4; vertical-align: top; }
+    tr:nth-child(even) td { background: #f9fefb; }
+    .callout { background: #ecfdf5; border-left: 4px solid #059669; padding: 14px 18px; margin: 20px 0; border-radius: 0 6px 6px 0; }
+    .callout.warn { background: #fffbeb; border-left-color: #d97706; }
+    .callout.info { background: #eff6ff; border-left-color: #3b82f6; }
+    code { background: #f1f5f9; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 0.87em; }
+    pre { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px 20px; margin: 14px 0; font-family: 'Courier New', monospace; font-size: 0.85em; line-height: 1.7; overflow-x: auto; }
+    .flow { background: #f0fdf4; border: 1px solid #6ee7b7; border-radius: 8px; padding: 20px 24px; margin: 18px 0; font-family: 'Courier New', monospace; font-size: 0.88em; line-height: 2.2; }
+    .badge { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 0.8em; font-weight: bold; margin-left: 6px; }
+    .badge-new { background: #d1fae5; color: #065f46; }
+    .badge-mod { background: #dbeafe; color: #1d4ed8; }
+    .effort-box { background: #065f46; color: white; padding: 16px 20px; border-radius: 8px; margin: 24px 0; text-align: center; font-size: 1.05em; }
+    .section-note { color: #666; font-style: italic; margin-bottom: 20px; font-size: 0.95em; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="doc-header">
+    <h1>📬 Vision + /letter Skill</h1>
+    <div class="subtitle">Final Implementation Plan — Post Code Review</div>
+    <div class="meta">March 20, 2026 &nbsp;·&nbsp; Reviewed against existing NanoClaw codebase &nbsp;·&nbsp; Local stack (privacy-first)</div>
+  </div>
+
+  <!-- PRINCIPLES -->
+  <h2>Design Principles</h2>
+  <div class="callout">
+    <strong>Mirror the voice.ts pattern exactly.</strong> Voice transcription already solves this problem: download media on the host, process on the host, pass text to the container. Image processing follows the same path. The agent skill receives structured text — never raw image data.
+  </div>
+  <ul>
+    <li>Host-side processing only — Apple Vision and Ollama never exposed to containers</li>
+    <li>Graceful degradation — if tools unavailable, fall back to <code>[Photo - OCR unavailable]</code></li>
+    <li>IPC stays lean — large data stored as files, containers receive path references</li>
+    <li>Flat module structure — <code>src/image-processor.ts</code>, not a directory</li>
+    <li>Privacy-first — no data leaves the Mac mini unless Claude is explicitly invoked</li>
+  </ul>
+
+  <!-- ARCHITECTURE -->
+  <h2>Architecture: How It Fits the Codebase</h2>
+
+  <h3>The voice.ts template</h3>
+  <p>The existing voice pipeline is the exact blueprint:</p>
+  <div class="flow">
+Voice message → telegram.ts downloads .ogg<br>
+→ voice.ts transcribes on HOST (Whisper)<br>
+→ Agent receives: <strong>[voice]: extracted text</strong><br>
+→ Agent processes the text content
+  </div>
+  <p>Image processing follows the same pattern:</p>
+  <div class="flow">
+Photo/PDF → telegram.ts downloads image<br>
+→ image-processor.ts extracts on HOST (Apple Vision + Ollama)<br>
+→ Agent receives: <strong>[image]: {text, structure, metadata} or file path ref</strong><br>
+→ /letter skill processes the structured content
+  </div>
+
+  <h3>Why not call host.docker.internal from the container?</h3>
+  <p>
+    While <code>host.docker.internal</code> is already used for the credential proxy (confirmed in <code>container-runtime.ts:15</code>), that is a mandatory, always-running service. Ollama is optional. Coupling the container to an optional host service would create silent failures and fragility. The pre-processing approach keeps the boundary clean.
+  </p>
+
+  <!-- FILE STRUCTURE -->
+  <h2>File Changes</h2>
+
+  <table>
+    <tr><th>File</th><th>Change</th><th>Parallel to</th></tr>
+    <tr>
+      <td><code>src/image-processor.ts</code></td>
+      <td><span class="badge badge-new">NEW</span> ~300 lines</td>
+      <td><code>src/voice.ts</code></td>
+    </tr>
+    <tr>
+      <td><code>src/image-processor.test.ts</code></td>
+      <td><span class="badge badge-new">NEW</span></td>
+      <td>existing test files</td>
+    </tr>
+    <tr>
+      <td><code>src/channels/telegram.ts</code></td>
+      <td><span class="badge badge-mod">MODIFIED</span> line 437</td>
+      <td>voice handler at line 439</td>
+    </tr>
+    <tr>
+      <td><code>src/config.ts</code></td>
+      <td><span class="badge badge-mod">MODIFIED</span> add 5 constants</td>
+      <td>existing CREDENTIAL_PROXY_PORT pattern</td>
+    </tr>
+    <tr>
+      <td><code>src/index.ts</code></td>
+      <td><span class="badge badge-mod">MODIFIED</span> add checkImageTools()</td>
+      <td>existing checkVoiceTools() call</td>
+    </tr>
+    <tr>
+      <td><code>container/skills/letter/SKILL.md</code></td>
+      <td><span class="badge badge-new">NEW</span></td>
+      <td>other skills in container/skills/</td>
+    </tr>
+    <tr>
+      <td><code>groups/[group]/letter-profile.md</code></td>
+      <td><span class="badge badge-new">AUTO-CREATED</span> on first use</td>
+      <td>memory/learner.json in tutor groups</td>
+    </tr>
+  </table>
+
+  <!-- SRC/IMAGE-PROCESSOR.TS -->
+  <h2>src/image-processor.ts — Structure</h2>
+  <p class="section-note">Single flat module. Follows voice.ts internal organisation.</p>
+
+  <pre>
+// --- Config & state ---
+export let IMAGE_PROCESSOR_AVAILABLE = false;
+export const IMAGE_TEMP_DIR = path.join(os.tmpdir(), 'nanoclaw-vision');
+
+// --- Startup check (mirrors checkVoiceTools()) ---
+export async function checkImageTools(): Promise&lt;{ available: boolean; issues: string[] }&gt; {
+  // 1. Check platform (macOS required for mac-system-ocr)
+  // 2. Try require('mac-system-ocr') — optional dependency
+  // 3. Check Ollama at OLLAMA_HOST (HTTP GET /api/tags)
+  // Log warnings for anything missing
+  // Set IMAGE_PROCESSOR_AVAILABLE
+}
+
+// --- Apple Vision OCR (raw text extraction) ---
+export async function extractTextAppleVision(imagePath: string): Promise&lt;string | null&gt;
+
+// --- Ollama Vision (document understanding) ---
+export async function analyzeViaOllama(imagePath: string, extractedText: string): Promise&lt;ImageAnalysis | null&gt;
+// Returns: { text, sender, date, reference, summary, deadline, tone, action }
+
+// --- Main public API ---
+export async function processImage(imagePath: string): Promise&lt;ImageProcessorResult | null&gt;
+// Orchestrates: Apple Vision → Ollama → ImageProcessorResult
+// Returns null if tools unavailable
+
+// --- IPC file writer (for multi-page letters) ---
+export function writeImageResultFile(msgId: string, result: ImageProcessorResult): string
+// Writes to /workspace/ipc/files/letter-{msgId}.json
+// Returns file path
+
+// --- Format for agent (mirrors formatVoiceContent()) ---
+export function formatImageContent(result: ImageProcessorResult, filePath: string): string
+// Returns "[letter]: /workspace/ipc/files/letter-{msgId}.json"
+// OR inline if small enough
+
+// --- Temp file cleanup ---
+export function cleanupTempFiles(): void
+  </pre>
+
+  <!-- CONFIG ADDITIONS -->
+  <h2>config.ts Additions</h2>
+  <pre>
+export const OLLAMA_HOST   = process.env.OLLAMA_HOST  || 'http://localhost:11434';
+export const OLLAMA_MODEL  = process.env.OLLAMA_MODEL  || 'qwen2.5-vl:7b';
+export const OLLAMA_ENABLED = process.env.OLLAMA_ENABLED !== 'false'; // opt-out not opt-in
+export const IMAGE_PROCESSOR_ENABLED = process.env.IMAGE_PROCESSOR_ENABLED !== 'false';
+export const IMAGE_TEMP_DIR = path.join(os.tmpdir(), 'nanoclaw-vision');
+  </pre>
+
+  <!-- TELEGRAM.TS CHANGE -->
+  <h2>telegram.ts Change (line 437)</h2>
+  <p>Before:</p>
+  <pre>this.bot.on('message:photo', (ctx) =&gt; storeNonText(ctx, '[Photo]'));</pre>
+  <p>After (mirrors voice handler at line 439):</p>
+  <pre>
+this.bot.on('message:photo', async (ctx) =&gt; {
+  if (!IMAGE_PROCESSOR_AVAILABLE) {
+    storeNonText(ctx, '[Photo]');  // Graceful degradation
+    return;
+  }
+  try {
+    // Download largest photo size to temp dir
+    const photo = ctx.message.photo[ctx.message.photo.length - 1];
+    const file  = await ctx.getFile();
+    const url   = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+    const imgPath = await downloadToTemp(url, photo.file_unique_id);
+
+    // Process on host (Apple Vision + Ollama)
+    const result = await processImage(imgPath);
+    if (!result) {
+      storeNonText(ctx, '[Photo - processing failed]');
+      return;
+    }
+
+    // Write result file (keeps IPC lean for multi-page)
+    const filePath = writeImageResultFile(photo.file_unique_id, result);
+
+    // Pass to agent as structured reference
+    const content  = formatImageContent(result, filePath);
+    const caption  = ctx.message.caption || '';
+    this.opts.onMessage(chatJid, {
+      content: caption ? `${content}\n${caption}` : content,
+      sender: senderName,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    logger.error({ err }, 'Error processing image');
+    storeNonText(ctx, '[Photo - processing error]');
+  }
+});
+
+// Also handle documents (PDFs, uncompressed images)
+this.bot.on('message:document', async (ctx) =&gt; {
+  const mime = ctx.message.document?.mime_type || '';
+  if (mime.startsWith('image/') || mime === 'application/pdf') {
+    // Same flow as photo handler above
+  } else {
+    storeNonText(ctx, '[Document]');
+  }
+});
+  </pre>
+
+  <!-- IPC PAYLOAD -->
+  <h2>IPC Payload Strategy</h2>
+  <p>
+    A 3-page letter scanned at typical phone resolution is 8–20 MB of base64. This must not go inline in the IPC message.
+  </p>
+  <div class="callout warn">
+    <strong>Rule:</strong> Image data never travels through IPC as base64. Only file path references.
+  </div>
+  <ul>
+    <li>Extracted text + structured data stored in <code>/workspace/ipc/files/letter-{id}.json</code></li>
+    <li>Agent receives: <code>[letter]: /workspace/ipc/files/letter-abc123.json</code></li>
+    <li>Agent reads the file directly — container has <code>/workspace/ipc</code> mounted</li>
+    <li>Files expire after 24h (cleanup job or on next session start)</li>
+  </ul>
+
+  <h3>letter-{id}.json schema</h3>
+  <pre>
+{
+  "processed_at": "2026-03-20T22:00:00Z",
+  "pages": 3,
+  "extracted_text": "Full OCR text from all pages...",
+  "analysis": {
+    "sender": "Gemeinde Zürich",
+    "date": "2026-03-15",
+    "reference": "AZ-2026-1234",
+    "summary": "Request to confirm current address by April 15",
+    "deadline": "2026-04-15",
+    "tone": "formal",
+    "action": "reply_needed"
+  }
+}
+  </pre>
+
+  <!-- /LETTER SKILL -->
+  <h2>The /letter Skill (SKILL.md)</h2>
+  <p class="section-note">
+    Lighter than originally planned — pre-processing happens on the host. The skill is pure orchestration.
+  </p>
+  <p>When triggered (<code>/letter</code>), the skill:</p>
+  <ol>
+    <li>Looks back in conversation for <code>[letter]:</code> markers (recent messages)</li>
+    <li>Reads the referenced JSON file(s) from <code>/workspace/ipc/files/</code></li>
+    <li>Presents the structured summary to the user</li>
+    <li>Asks 1–3 targeted questions if a reply is needed</li>
+    <li>Drafts reply in the original language + English translation</li>
+    <li>Iterates on request; optionally outputs as PDF</li>
+  </ol>
+  <div class="callout info">
+    <strong>UX guidance in SKILL.md:</strong> User should send all letter photos first, then type <code>/letter</code>. The skill can also accept <code>/letter reply — decline politely</code> to combine in one step.
+  </div>
+
+  <!-- GRACEFUL DEGRADATION -->
+  <h2>Graceful Degradation Matrix</h2>
+  <table>
+    <tr><th>Condition</th><th>Agent receives</th><th>Skill behaviour</th></tr>
+    <tr>
+      <td>Apple Vision + Ollama both available</td>
+      <td><code>[letter]: /path/to/analysis.json</code></td>
+      <td>Full pipeline — summary, clarification, draft</td>
+    </tr>
+    <tr>
+      <td>Ollama unavailable</td>
+      <td><code>[letter-text]: raw OCR text only</code></td>
+      <td>Claude interprets raw text — slightly slower, still works</td>
+    </tr>
+    <tr>
+      <td>Apple Vision unavailable</td>
+      <td><code>[Photo - OCR unavailable]</code></td>
+      <td>Skill asks user to copy-paste the letter text</td>
+    </tr>
+    <tr>
+      <td>Running on Linux / VPS</td>
+      <td><code>[Photo - OCR unavailable]</code></td>
+      <td>Same as above — graceful, no crash</td>
+    </tr>
+    <tr>
+      <td>Poor image quality</td>
+      <td><code>[letter-text]: partial OCR...</code></td>
+      <td>Skill notes which parts were unreadable</td>
+    </tr>
+  </table>
+
+  <!-- TESTS -->
+  <h2>Test Coverage</h2>
+  <table>
+    <tr><th>Test</th><th>Approach</th></tr>
+    <tr>
+      <td>Apple Vision text extraction</td>
+      <td>Mock <code>mac-system-ocr</code> module — return fixture text</td>
+    </tr>
+    <tr>
+      <td>Ollama API call</td>
+      <td>Mock <code>fetch</code> — return fixture JSON response</td>
+    </tr>
+    <tr>
+      <td>Ollama unavailable</td>
+      <td>Mock <code>fetch</code> to reject — verify null return</td>
+    </tr>
+    <tr>
+      <td>Telegram photo handler</td>
+      <td>Mock grammY ctx, mock processImage() — verify storeNonText fallback</td>
+    </tr>
+    <tr>
+      <td>IPC file writing</td>
+      <td>Mock fs.writeFileSync — verify schema</td>
+    </tr>
+    <tr>
+      <td>checkImageTools() on Linux</td>
+      <td>Mock os.platform() = 'linux' — verify AVAILABLE = false</td>
+    </tr>
+    <tr>
+      <td>End-to-end with real Ollama</td>
+      <td>Integration test — <code>describe.skipIf(!OLLAMA_AVAILABLE)</code></td>
+    </tr>
+  </table>
+
+  <!-- EFFORT -->
+  <h2>Effort Estimate (Revised)</h2>
+  <table>
+    <tr><th>Task</th><th>Estimate</th><th>Notes</th></tr>
+    <tr><td>Ollama setup on Mac mini</td><td>15 min (Bartek)</td><td>ollama.com + pull qwen2.5-vl:7b</td></tr>
+    <tr><td><code>src/image-processor.ts</code></td><td>3–4h</td><td>Follow voice.ts structure exactly</td></tr>
+    <tr><td>telegram.ts photo + document handlers</td><td>2–3h</td><td>Closely mirrors existing voice handler</td></tr>
+    <tr><td>config.ts + index.ts startup check</td><td>30 min</td><td>Trivial — follows existing pattern</td></tr>
+    <tr><td>Unit tests for image-processor</td><td>2h</td><td>Mock Ollama + Apple Vision</td></tr>
+    <tr><td>letter/SKILL.md</td><td>2–3h</td><td>Prompt engineering, orchestration logic</td></tr>
+    <tr><td>letter-profile.md + PDF template</td><td>1h</td><td>Simple files, created on first use</td></tr>
+    <tr><td>End-to-end testing with real letters</td><td>1–2h</td><td>German, French, Italian samples</td></tr>
+  </table>
+
+  <div class="effort-box">
+    Total: <strong>12–14 hours</strong> &nbsp;·&nbsp; Across 2–3 sessions
+  </div>
+
+  <!-- BUILD ORDER -->
+  <h2>Build Order</h2>
+  <ol>
+    <li>
+      <strong>Bartek: install Ollama + pull model</strong> — 15 minutes, one-time
+      <br><code>ollama pull qwen2.5-vl:7b</code>
+    </li>
+    <li>
+      <strong>src/image-processor.ts + config + startup check</strong>
+      <br>Foundation — everything else depends on this
+    </li>
+    <li>
+      <strong>telegram.ts photo + document handlers + tests</strong>
+      <br>Enables image vision across all Telegram groups
+    </li>
+    <li>
+      <strong>letter/SKILL.md</strong>
+      <br>Wire up the user-facing skill using the now-working pipeline
+    </li>
+    <li>
+      <strong>letter-profile.md + PDF output</strong>
+      <br>Polish: personal details persistence + formatted reply output
+    </li>
+  </ol>
+
+  <div class="callout">
+    <strong>After step 3</strong>, image vision works for all groups — not just /letter. The tutor groups (Spanish, German) can also "see" photos. This is the highest-leverage step.
+  </div>
+
+</div>
+</body>
+</html>
