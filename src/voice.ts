@@ -267,6 +267,34 @@ const edgeTTS: TTSProvider = {
   },
 };
 
+// --- TTS text cleaning ---
+
+/**
+ * Strip markdown, emoji, URLs, and other visual formatting that sounds
+ * wrong when read aloud by TTS. The text companion message keeps them.
+ */
+export function cleanForTTS(text: string): string {
+  return text
+    // Markdown links [text](url) → text
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // Standalone URLs
+    .replace(/https?:\/\/\S+/g, '')
+    // Bold / italic markers (* and _)
+    .replace(/[*_]{1,3}/g, '')
+    // Backticks (inline and fenced code blocks)
+    .replace(/`{1,3}/g, '')
+    // Heading markers
+    .replace(/^#{1,6}\s+/gm, '')
+    // Bullet markers
+    .replace(/^[\s]*[•\-]\s+/gm, '')
+    // Emoji (Unicode emoji range)
+    .replace(/[\u{1F600}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1FA00}-\u{1FAFF}\u{1F300}-\u{1F5FF}\u{1F1E0}-\u{1F1FF}\u{200D}\u{FE0F}]/gu, '')
+    // Collapse whitespace
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/  +/g, ' ')
+    .trim();
+}
+
 // --- Public API ---
 
 export async function transcribe(

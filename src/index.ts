@@ -68,6 +68,7 @@ import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import {
   checkVoiceTools,
+  cleanForTTS,
   cleanupTempDir,
   ensureTempDir,
   isVoiceMessage,
@@ -91,6 +92,7 @@ const startedAt = Date.now();
 const channels: Channel[] = [];
 const queue = new GroupQueue();
 const voiceTriggered = new Map<string, boolean>();
+const textOnlyChats = new Set<string>();
 
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
@@ -304,12 +306,12 @@ async function processGroupMessages(
         outputSentToUser = true;
 
         // Voice mirror: if triggered by a voice message, send TTS reply too
-        if (voiceTriggered.get(chatJid) && channel.sendVoice) {
+        if (voiceTriggered.get(chatJid) && !textOnlyChats.has(chatJid) && channel.sendVoice) {
           const voiceConfig = loadVoiceConfig(
             registeredGroups[chatJid]?.folder || '',
           );
           if (voiceConfig && text.length <= voiceConfig.max_tts_chars) {
-            synthesize(text, voiceConfig.tts_voice, `reply-${Date.now()}`)
+            synthesize(cleanForTTS(text), voiceConfig.tts_voice, `reply-${Date.now()}`)
               .then(async (oggPath) => {
                 if (oggPath) {
                   await channel.sendVoice!(chatJid, oggPath);
@@ -715,6 +717,14 @@ async function main(): Promise<void> {
         queueWaiting: qs.waitingCount,
         activeGroups: qs.activeGroups,
       };
+    },
+    toggleTextOnly: (chatJid: string): boolean => {
+      if (textOnlyChats.has(chatJid)) {
+        textOnlyChats.delete(chatJid);
+        return false; // mirror mode restored
+      }
+      textOnlyChats.add(chatJid);
+      return true; // text-only mode on
     },
     onMessage: (chatJid: string, msg: NewMessage) => {
       // Remote control commands — intercept before storage

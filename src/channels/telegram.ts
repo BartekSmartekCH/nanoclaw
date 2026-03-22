@@ -34,6 +34,7 @@ export interface TelegramChannelOpts {
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
   getSystemStatus?: () => SystemStatus;
+  toggleTextOnly?: (chatJid: string) => boolean;
 }
 
 /**
@@ -314,6 +315,14 @@ export class TelegramChannel implements Channel {
       ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
     });
 
+    // /text — toggle text-only mode (suppresses voice mirror replies)
+    this.bot.command('text', (ctx) => {
+      if (!this.opts.toggleTextOnly) return;
+      const chatJid = `tg:${ctx.chat.id}`;
+      const isTextOnly = this.opts.toggleTextOnly(chatJid);
+      ctx.reply(isTextOnly ? '💬 Text mode on' : '🔁 Mirror mode');
+    });
+
     // Telegram bot commands handled above — skip them in the general handler
     // so they don't also get stored as messages. All other /commands flow through.
     const TELEGRAM_BOT_COMMANDS = new Set([
@@ -323,6 +332,7 @@ export class TelegramChannel implements Channel {
       'fix_auth',
       'help',
       'status',
+      'text',
     ]);
 
     this.bot.on('message:text', async (ctx) => {
@@ -673,8 +683,7 @@ export class TelegramChannel implements Channel {
       { command: 'help', description: 'List available commands' },
       { command: 'status', description: 'System health check' },
       { command: 'dev', description: 'Assemble dev team for a task' },
-      { command: 'speak', description: 'Switch to voice replies' },
-      { command: 'text', description: 'Switch to text-only replies' },
+      { command: 'text', description: 'Toggle text-only / voice mirror mode' },
     ];
     this.bot.api
       .setMyCommands(defaultCommands)
