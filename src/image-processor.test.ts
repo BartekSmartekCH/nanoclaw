@@ -89,7 +89,8 @@ describe('image-processor', () => {
         'fetch',
         vi.fn().mockResolvedValue({
           ok: true,
-          json: () => Promise.resolve({ response: JSON.stringify(mockAnalysis) }),
+          json: () =>
+            Promise.resolve({ response: JSON.stringify(mockAnalysis) }),
         }),
       );
 

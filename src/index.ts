@@ -74,10 +74,7 @@ import {
   loadVoiceConfig,
   synthesize,
 } from './voice.js';
-import {
-  checkImageTools,
-  cleanupImageTemp,
-} from './image-processor.js';
+import { checkImageTools, cleanupImageTemp } from './image-processor.js';
 import { refreshOAuthToken } from './credential-refresh.js';
 import { logger } from './logger.js';
 

@@ -73,10 +73,7 @@ export async function checkImageTools(): Promise<{
   // Check Ollama
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      OLLAMA_CHECK_TIMEOUT,
-    );
+    const timeout = setTimeout(() => controller.abort(), OLLAMA_CHECK_TIMEOUT);
     const res = await fetch(`${OLLAMA_HOST}/api/tags`, {
       signal: controller.signal,
     });
@@ -93,7 +90,11 @@ export async function checkImageTools(): Promise<{
 
   if (available) {
     logger.info(
-      { ollamaHost: OLLAMA_HOST, ollamaModel: OLLAMA_MODEL, tempDir: IMAGE_TEMP_DIR },
+      {
+        ollamaHost: OLLAMA_HOST,
+        ollamaModel: OLLAMA_MODEL,
+        tempDir: IMAGE_TEMP_DIR,
+      },
       'Image processor available',
     );
   } else {
@@ -120,7 +121,9 @@ export async function downloadImageToTemp(
 
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`Failed to download image: ${res.status} ${res.statusText}`);
+    throw new Error(
+      `Failed to download image: ${res.status} ${res.statusText}`,
+    );
   }
 
   const buffer = Buffer.from(await res.arrayBuffer());
@@ -209,10 +212,7 @@ Return ONLY valid JSON, no markdown, no explanation.`;
     clearTimeout(timeout);
 
     if (!res.ok) {
-      logger.warn(
-        { status: res.status },
-        'Ollama returned non-OK response',
-      );
+      logger.warn({ status: res.status }, 'Ollama returned non-OK response');
       return null;
     }
 
@@ -229,8 +229,19 @@ Return ONLY valid JSON, no markdown, no explanation.`;
     const parsed = JSON.parse(jsonStr);
 
     // Validate required fields
-    const validTones = ['routine', 'formal', 'urgent', 'legal', 'junk'] as const;
-    const validActions = ['reply_needed', 'info_only', 'urgent', 'junk'] as const;
+    const validTones = [
+      'routine',
+      'formal',
+      'urgent',
+      'legal',
+      'junk',
+    ] as const;
+    const validActions = [
+      'reply_needed',
+      'info_only',
+      'urgent',
+      'junk',
+    ] as const;
 
     const analysis: ImageAnalysis = {
       sender: parsed.sender ?? null,
@@ -239,7 +250,9 @@ Return ONLY valid JSON, no markdown, no explanation.`;
       summary: String(parsed.summary || 'No summary available'),
       deadline: parsed.deadline ?? null,
       tone: validTones.includes(parsed.tone) ? parsed.tone : 'routine',
-      action: validActions.includes(parsed.action) ? parsed.action : 'info_only',
+      action: validActions.includes(parsed.action)
+        ? parsed.action
+        : 'info_only',
     };
 
     return analysis;

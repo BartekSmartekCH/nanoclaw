@@ -84,7 +84,8 @@ export const TELEGRAM_BOT_POOL = (
 // Image processor settings
 export const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
 export const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5vl:7b';
-export const IMAGE_PROCESSOR_ENABLED = process.env.IMAGE_PROCESSOR_ENABLED !== 'false';
+export const IMAGE_PROCESSOR_ENABLED =
+  process.env.IMAGE_PROCESSOR_ENABLED !== 'false';
 export const IMAGE_TEMP_DIR = path.join(os.tmpdir(), 'nanoclaw-vision');
 
 // Timezone for scheduled tasks (cron expressions, etc.)
