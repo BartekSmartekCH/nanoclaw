@@ -455,7 +455,13 @@ export class TelegramChannel implements Channel {
         'Unknown';
       const isGroup =
         ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
       try {
         const photo = ctx.message.photo[ctx.message.photo.length - 1];
         const file = await ctx.api.getFile(photo.file_id);
@@ -464,7 +470,10 @@ export class TelegramChannel implements Channel {
           return;
         }
         const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
-        const imgPath = await downloadImageToTemp(fileUrl, photo.file_unique_id);
+        const imgPath = await downloadImageToTemp(
+          fileUrl,
+          photo.file_unique_id,
+        );
         const result = await processImage(imgPath);
         if (!result) {
           storeNonText(ctx, '[Photo - processing failed]');
@@ -586,7 +595,10 @@ export class TelegramChannel implements Channel {
     this.bot.on('message:document', async (ctx) => {
       const mime = ctx.message.document?.mime_type || '';
       const name = ctx.message.document?.file_name || 'file';
-      if (!IMAGE_PROCESSOR_AVAILABLE || (!mime.startsWith('image/') && mime !== 'application/pdf')) {
+      if (
+        !IMAGE_PROCESSOR_AVAILABLE ||
+        (!mime.startsWith('image/') && mime !== 'application/pdf')
+      ) {
         storeNonText(ctx, `[Document: ${name}]`);
         return;
       }
@@ -600,7 +612,13 @@ export class TelegramChannel implements Channel {
         'Unknown';
       const isGroup =
         ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
       try {
         const doc = ctx.message.document!;
         const file = await ctx.api.getFile(doc.file_id);
@@ -627,7 +645,10 @@ export class TelegramChannel implements Channel {
           timestamp,
           is_from_me: false,
         });
-        logger.info({ chatJid, msgId, mime }, 'Document processed via image processor');
+        logger.info(
+          { chatJid, msgId, mime },
+          'Document processed via image processor',
+        );
       } catch (err) {
         logger.error({ err }, 'Error processing document');
         storeNonText(ctx, `[Document: ${name}]`);
@@ -650,6 +671,10 @@ export class TelegramChannel implements Channel {
       { command: 'ping', description: 'Check if bot is online' },
       { command: 'chatid', description: 'Show chat registration ID' },
       { command: 'help', description: 'List available commands' },
+      { command: 'status', description: 'System health check' },
+      { command: 'dev', description: 'Assemble dev team for a task' },
+      { command: 'speak', description: 'Switch to voice replies' },
+      { command: 'text', description: 'Switch to text-only replies' },
     ];
     this.bot.api
       .setMyCommands(defaultCommands)

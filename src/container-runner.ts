@@ -4,6 +4,7 @@
  */
 import { ChildProcess, exec, spawn } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import {
@@ -64,12 +65,11 @@ function buildVolumeMounts(
   const projectRoot = process.cwd();
   const groupDir = resolveGroupFolderPath(group.folder);
 
-  if (isMain) {
-    // Main gets the project root read-only. Writable paths the agent needs
+  const getsProjectMount = isMain || group.containerConfig?.devAccess;
+
+  if (getsProjectMount) {
+    // Project root read-only. Writable paths the agent needs
     // (group folder, IPC, .claude/) are mounted separately below.
-    // Read-only prevents the agent from modifying host application code
-    // (src/, dist/, package.json, etc.) which would bypass the sandbox
-    // entirely on next restart.
     mounts.push({
       hostPath: projectRoot,
       containerPath: '/workspace/project',
@@ -86,28 +86,38 @@ function buildVolumeMounts(
         readonly: true,
       });
     }
+  }
 
-    // Main also gets its group folder as the working directory
-    mounts.push({
-      hostPath: groupDir,
-      containerPath: '/workspace/group',
-      readonly: false,
-    });
-  } else {
-    // Other groups only get their own folder
-    mounts.push({
-      hostPath: groupDir,
-      containerPath: '/workspace/group',
-      readonly: false,
-    });
+  // Group folder (all groups get their own writable folder)
+  mounts.push({
+    hostPath: groupDir,
+    containerPath: '/workspace/group',
+    readonly: false,
+  });
 
-    // Global memory directory (read-only for non-main)
-    // Only directory mounts are supported, not file mounts
+  // Global memory directory (read-only for non-main)
+  if (!isMain) {
     const globalDir = path.join(GROUPS_DIR, 'global');
     if (fs.existsSync(globalDir)) {
       mounts.push({
         hostPath: globalDir,
         containerPath: '/workspace/global',
+        readonly: true,
+      });
+    }
+  }
+
+  // Skills directory (dev access groups only, read-only)
+  if (getsProjectMount && !isMain) {
+    const skillsDir = path.join(
+      process.env.HOME || os.homedir(),
+      '.claude',
+      'skills',
+    );
+    if (fs.existsSync(skillsDir)) {
+      mounts.push({
+        hostPath: skillsDir,
+        containerPath: '/workspace/skills',
         readonly: true,
       });
     }
