@@ -1,0 +1,11 @@
+{
+  "name": "coder-bot",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "build": "tsc", "start": "node dist/index.js" },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
