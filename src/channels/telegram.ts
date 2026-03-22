@@ -605,6 +605,49 @@ export class TelegramChannel implements Channel {
     this.bot.on('message:document', async (ctx) => {
       const mime = ctx.message.document?.mime_type || '';
       const name = ctx.message.document?.file_name || 'file';
+      if (mime.startsWith('text/')) {
+        const doc = ctx.message.document!;
+        const chatJid = `tg:${ctx.chat.id}`;
+        const msgId = ctx.message.message_id.toString();
+        const timestamp = new Date(ctx.message.date * 1000).toISOString();
+        const senderName =
+          ctx.from?.first_name ||
+          ctx.from?.username ||
+          ctx.from?.id?.toString() ||
+          'Unknown';
+        const isGroup =
+          ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+        this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+        try {
+          const file = await ctx.api.getFile(doc.file_id);
+          if (!file.file_path) {
+            storeNonText(ctx, `[Document: ${name}]`);
+            return;
+          }
+          const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+          const raw = await fetch(fileUrl).then(r => r.text());
+          const MAX = 65_536;
+          const truncated = raw.length > MAX
+            ? raw.slice(0, MAX) + '\n[...truncated]'
+            : raw;
+          const caption = ctx.message.caption ? `\n${ctx.message.caption}` : '';
+          const content = `[File: ${name}]\n\`\`\`\n${truncated}\n\`\`\`${caption}`;
+          this.opts.onMessage(chatJid, {
+            id: msgId,
+            chat_jid: chatJid,
+            sender: ctx.from?.id?.toString() || '',
+            sender_name: senderName,
+            content,
+            timestamp,
+            is_from_me: false,
+          });
+          logger.info({ chatJid, msgId, mime }, 'Text document extracted');
+        } catch (err) {
+          logger.error({ err }, 'Error reading text document');
+          storeNonText(ctx, `[Document: ${name}]`);
+        }
+        return;
+      }
       if (
         !IMAGE_PROCESSOR_AVAILABLE ||
         (!mime.startsWith('image/') && mime !== 'application/pdf')

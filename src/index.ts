@@ -306,12 +306,20 @@ async function processGroupMessages(
         outputSentToUser = true;
 
         // Voice mirror: if triggered by a voice message, send TTS reply too
-        if (voiceTriggered.get(chatJid) && !textOnlyChats.has(chatJid) && channel.sendVoice) {
+        if (
+          voiceTriggered.get(chatJid) &&
+          !textOnlyChats.has(chatJid) &&
+          channel.sendVoice
+        ) {
           const voiceConfig = loadVoiceConfig(
             registeredGroups[chatJid]?.folder || '',
           );
           if (voiceConfig && text.length <= voiceConfig.max_tts_chars) {
-            synthesize(cleanForTTS(text), voiceConfig.tts_voice, `reply-${Date.now()}`)
+            synthesize(
+              cleanForTTS(text),
+              voiceConfig.tts_voice,
+              `reply-${Date.now()}`,
+            )
               .then(async (oggPath) => {
                 if (oggPath) {
                   await channel.sendVoice!(chatJid, oggPath);

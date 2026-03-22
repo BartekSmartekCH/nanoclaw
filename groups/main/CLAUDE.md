@@ -34,6 +34,10 @@ Text inside `<internal>` tags is logged but not sent to the user. If you've alre
 
 When working as a sub-agent or teammate, only use `send_message` if instructed to by the main agent.
 
+## Scopes
+
+All scope documents, RFCs, and design specs go in `/workspace/project/scopes/`. This is the single shared folder for all bots — never create scopes in the group folder. Use subfolders for multi-file scopes (e.g., `/workspace/project/scopes/my-feature/SCOPE.md`).
+
 ## Memory
 
 The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.

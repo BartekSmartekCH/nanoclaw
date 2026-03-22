@@ -42,6 +42,10 @@ NEVER directly call the Anthropic API, test API keys, or inspect authentication 
 
 Files you create are saved in `/workspace/group/`. Use this for notes, research, or anything that should persist.
 
+## Scopes
+
+All scope documents, RFCs, and design specs go in `/workspace/project/scopes/`. This is the single shared folder for all bots — never create scopes in your group folder. Use subfolders for multi-file scopes (e.g., `/workspace/project/scopes/my-feature/SCOPE.md`).
+
 ## Memory
 
 The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.
