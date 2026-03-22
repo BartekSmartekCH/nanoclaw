@@ -8,6 +8,10 @@ const WORKING_DIR = '/Users/tataadmin/nanoclaw'
 const TIMEOUT_MS = 10 * 60 * 1000
 let isFirstMessage = true
 let activeProcess: ChildProcess | null = null
+let currentModel = 'sonnet'
+
+export function getModel(): string { return currentModel }
+export function setModel(m: string): void { currentModel = m }
 
 export function ensureClaudeConfig(): void {
   fs.mkdirSync(CLAUDE_CONFIG_DIR, { mode: 0o700, recursive: true })
@@ -28,7 +32,7 @@ export function clearSession(): void { abortCurrent(); isFirstMessage = true; lo
 
 export async function runClaude(prompt: string, onChunk: (text: string) => Promise<void>): Promise<void> {
   if (activeProcess) throw new Error('Claude is already running. Send /abort to cancel.')
-  const args = ['--print', '--dangerously-skip-permissions']
+  const args = ['--print', '--dangerously-skip-permissions', '--model', currentModel]
   if (!isFirstMessage) args.push('--continue')
   args.push(prompt)
   log('INFO', 'Spawning claude', { args: args.slice(0, -1) })

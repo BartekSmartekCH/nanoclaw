@@ -5,6 +5,8 @@ import {
   ASSISTANT_NAME,
   CREDENTIAL_PROXY_PORT,
   IDLE_TIMEOUT,
+  OLLAMA_HOST,
+  OLLAMA_MODEL,
   POLL_INTERVAL,
   TELEGRAM_BOT_POOL,
   TIMEZONE,
@@ -93,6 +95,9 @@ const channels: Channel[] = [];
 const queue = new GroupQueue();
 const voiceTriggered = new Map<string, boolean>();
 const textOnlyChats = new Set<string>();
+const chatModels = new Map<string, string>();
+const DEFAULT_MODEL = 'sonnet';
+const VALID_MODELS = new Set(['sonnet', 'opus', 'haiku', 'ollama']);
 
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
@@ -287,6 +292,22 @@ async function processGroupMessages(
   };
 
   await channel.setTyping?.(chatJid, true);
+
+  // Ollama fallback: bypass container entirely
+  const selectedModel = chatModels.get(chatJid) ?? DEFAULT_MODEL;
+  if (selectedModel === 'ollama') {
+    // Send raw message text to Ollama, not the XML-formatted prompt
+    const ollamaPrompt = missedMessages.map((m) => m.content).join('\n');
+    try {
+      await runOllamaChat(ollamaPrompt, chatJid, channel);
+    } catch (err) {
+      logger.error({ chatJid, err }, 'Ollama chat failed');
+    }
+    await channel.setTyping?.(chatJid, false);
+    voiceTriggered.delete(chatJid);
+    return true;
+  }
+
   let hadError = false;
   let outputSentToUser = false;
   let lastErrorText = '';
@@ -411,6 +432,36 @@ async function processGroupMessages(
   return true;
 }
 
+async function runOllamaChat(
+  prompt: string,
+  chatJid: string,
+  channel: Channel,
+): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      await channel.sendMessage(chatJid, `Ollama error: HTTP ${res.status}`);
+      return;
+    }
+    const data = (await res.json()) as { response?: string };
+    const text = data.response?.trim();
+    if (text) await channel.sendMessage(chatJid, text);
+    else await channel.sendMessage(chatJid, 'Ollama returned an empty response.');
+  } catch (err: unknown) {
+    clearTimeout(timeout);
+    const msg = err instanceof Error ? err.message : String(err);
+    await channel.sendMessage(chatJid, `Ollama unreachable: ${msg}`);
+  }
+}
+
 async function runAgent(
   group: RegisteredGroup,
   prompt: string,
@@ -466,6 +517,7 @@ async function runAgent(
         chatJid,
         isMain,
         assistantName: ASSISTANT_NAME,
+        model: chatModels.get(chatJid) ?? DEFAULT_MODEL,
       },
       (proc, containerName) =>
         queue.registerProcess(chatJid, proc, containerName, group.folder),
@@ -733,6 +785,11 @@ async function main(): Promise<void> {
       }
       textOnlyChats.add(chatJid);
       return true; // text-only mode on
+    },
+    switchModel: (chatJid: string, model: string | null): string => {
+      if (!model) return chatModels.get(chatJid) ?? DEFAULT_MODEL;
+      chatModels.set(chatJid, model);
+      return model;
     },
     onMessage: (chatJid: string, msg: NewMessage) => {
       // Remote control commands — intercept before storage

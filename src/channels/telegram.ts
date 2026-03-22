@@ -35,6 +35,7 @@ export interface TelegramChannelOpts {
   registeredGroups: () => Record<string, RegisteredGroup>;
   getSystemStatus?: () => SystemStatus;
   toggleTextOnly?: (chatJid: string) => boolean;
+  switchModel?: (chatJid: string, model: string | null) => string;
 }
 
 /**
@@ -323,6 +324,24 @@ export class TelegramChannel implements Channel {
       ctx.reply(isTextOnly ? '💬 Text mode on' : '🔁 Mirror mode');
     });
 
+    // /model — switch AI model (sonnet, opus, haiku, ollama)
+    this.bot.command('model', (ctx) => {
+      if (!this.opts.switchModel) return;
+      const chatJid = `tg:${ctx.chat.id}`;
+      const arg = ctx.match?.trim().toLowerCase() || null;
+      const validModels = ['sonnet', 'opus', 'haiku', 'ollama'];
+      if (arg && !validModels.includes(arg)) {
+        ctx.reply(`Valid models: ${validModels.join(', ')}`);
+        return;
+      }
+      const current = this.opts.switchModel(chatJid, arg);
+      if (arg) {
+        ctx.reply(`Switched to *${current}*`, { parse_mode: 'Markdown' });
+      } else {
+        ctx.reply(`Current model: *${current}*`, { parse_mode: 'Markdown' });
+      }
+    });
+
     // Telegram bot commands handled above — skip them in the general handler
     // so they don't also get stored as messages. All other /commands flow through.
     const TELEGRAM_BOT_COMMANDS = new Set([
@@ -333,6 +352,7 @@ export class TelegramChannel implements Channel {
       'help',
       'status',
       'text',
+      'model',
     ]);
 
     this.bot.on('message:text', async (ctx) => {
@@ -617,7 +637,13 @@ export class TelegramChannel implements Channel {
           'Unknown';
         const isGroup =
           ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-        this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+        this.opts.onChatMetadata(
+          chatJid,
+          timestamp,
+          undefined,
+          'telegram',
+          isGroup,
+        );
         try {
           const file = await ctx.api.getFile(doc.file_id);
           if (!file.file_path) {
@@ -625,11 +651,10 @@ export class TelegramChannel implements Channel {
             return;
           }
           const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
-          const raw = await fetch(fileUrl).then(r => r.text());
+          const raw = await fetch(fileUrl).then((r) => r.text());
           const MAX = 65_536;
-          const truncated = raw.length > MAX
-            ? raw.slice(0, MAX) + '\n[...truncated]'
-            : raw;
+          const truncated =
+            raw.length > MAX ? raw.slice(0, MAX) + '\n[...truncated]' : raw;
           const caption = ctx.message.caption ? `\n${ctx.message.caption}` : '';
           const content = `[File: ${name}]\n\`\`\`\n${truncated}\n\`\`\`${caption}`;
           this.opts.onMessage(chatJid, {
@@ -727,6 +752,7 @@ export class TelegramChannel implements Channel {
       { command: 'status', description: 'System health check' },
       { command: 'dev', description: 'Assemble dev team for a task' },
       { command: 'text', description: 'Toggle text-only / voice mirror mode' },
+      { command: 'model', description: 'Switch AI model (sonnet/opus/haiku/ollama)' },
     ];
     this.bot.api
       .setMyCommands(defaultCommands)

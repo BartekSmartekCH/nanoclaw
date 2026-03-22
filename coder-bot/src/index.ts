@@ -5,11 +5,15 @@ import os from 'os'
 import { promisify } from 'util'
 import { readKeychain } from './keychain.js'
 import { log } from './logger.js'
-import { runClaude, isRunning, abortCurrent, clearSession, ensureClaudeConfig } from './claude.js'
+import { runClaude, isRunning, abortCurrent, clearSession, ensureClaudeConfig, getModel, setModel } from './claude.js'
 import { validatePrompt, requiresScriptConfirmation } from './validator.js'
 
 const execFileAsync = promisify(execFile)
 const BARTEK_USER_ID = 8774386022
+const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434'
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5vl:7b'
+const VALID_MODELS = ['sonnet', 'opus', 'haiku', 'ollama']
+let useOllama = false
 const VOICE_TMP = path.join(os.tmpdir(), 'nanoclaw-voice')
 const TOOL_PATH = '/opt/homebrew/bin:/usr/local/bin:/usr/bin'
 const TOOL_ENV = { ...process.env, PATH: `${TOOL_PATH}:${process.env.PATH || ''}` }
@@ -45,9 +49,33 @@ async function send(chatId: number, text: string): Promise<void> {
   for (let i = 0; i < text.length; i += 4000)
     await tg('sendMessage', { chat_id: chatId, text: text.slice(i, i + 4000) })
 }
+async function runOllamaChat(chatId: number, prompt: string): Promise<void> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 120_000)
+  try {
+    const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false }),
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+    if (!res.ok) { await send(chatId, `Ollama error: HTTP ${res.status}`); return }
+    const data = (await res.json()) as { response?: string }
+    const text = data.response?.trim()
+    if (text) await send(chatId, text)
+    else await send(chatId, 'Ollama returned an empty response.')
+  } catch (err) {
+    clearTimeout(timeout)
+    await send(chatId, `Ollama unreachable: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
 async function executePrompt(chatId: number, prompt: string): Promise<void> {
   await send(chatId, '⏳ Working...')
-  try { await runClaude(prompt, async (chunk) => { await send(chatId, chunk) }) }
+  try {
+    if (useOllama) await runOllamaChat(chatId, prompt)
+    else await runClaude(prompt, async (chunk) => { await send(chatId, chunk) })
+  }
   catch (err) { await send(chatId, `❌ ${err instanceof Error ? err.message : String(err)}`) }
 }
 async function handleMessage(chatId: number, userId: number, text: string): Promise<void> {
@@ -61,7 +89,16 @@ async function handleMessage(chatId: number, userId: number, text: string): Prom
     return
   }
   if (input === '/start' || input === '/help') {
-    await send(chatId, '🤖 CoderBot — direct Claude Code access\n\n/clear — new session\n/abort — cancel\n/status — state')
+    await send(chatId, '🤖 CoderBot — direct Claude Code access\n\n/clear — new session\n/abort — cancel\n/status — state\n/model — switch AI model')
+    return
+  }
+  if (input === '/model' || input.startsWith('/model ')) {
+    const arg = input.slice(7).trim().toLowerCase()
+    if (!arg) { await send(chatId, `Current model: ${useOllama ? 'ollama' : getModel()}`); return }
+    if (!VALID_MODELS.includes(arg)) { await send(chatId, `Valid models: ${VALID_MODELS.join(', ')}`); return }
+    if (arg === 'ollama') { useOllama = true }
+    else { useOllama = false; setModel(arg) }
+    await send(chatId, `Switched to ${arg}`)
     return
   }
   if (input === '/clear') { clearSession(); await send(chatId, '✅ Session cleared.'); return }
