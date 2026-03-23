@@ -177,14 +177,15 @@ export async function checkAuthHealth(proxyPort = 3001): Promise<{
       return { ok: false, error: 'Credential proxy not reachable' };
     }
 
-    // For OAuth: check if Keychain token matches .env (detect stale token)
+    // For OAuth: verify a valid (non-expired) token exists in Keychain.
+    // The credential proxy reads directly from Keychain, so .env staleness
+    // is no longer an error — only a missing/expired Keychain token is.
     if (hasOAuth && process.platform === 'darwin') {
       const keychainToken = await readKeychainToken();
-      if (keychainToken && keychainToken !== envVars[ENV_KEY]) {
+      if (!keychainToken) {
         return {
           ok: false,
-          error:
-            'Token in .env is stale (differs from Keychain). Run /fix_auth',
+          error: 'No valid OAuth token in Keychain — run `claude auth login`',
         };
       }
     }
