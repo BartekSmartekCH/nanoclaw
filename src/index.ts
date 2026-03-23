@@ -454,7 +454,8 @@ async function runOllamaChat(
     const data = (await res.json()) as { response?: string };
     const text = data.response?.trim();
     if (text) await channel.sendMessage(chatJid, text);
-    else await channel.sendMessage(chatJid, 'Ollama returned an empty response.');
+    else
+      await channel.sendMessage(chatJid, 'Ollama returned an empty response.');
   } catch (err: unknown) {
     clearTimeout(timeout);
     const msg = err instanceof Error ? err.message : String(err);
@@ -712,6 +713,19 @@ async function main(): Promise<void> {
     CREDENTIAL_PROXY_PORT,
     PROXY_BIND_HOST,
   );
+
+  // Proactive auth: sync Keychain token to .env before any messages are processed
+  {
+    const refresh = await refreshOAuthToken();
+    if (refresh.success) {
+      logger.info('Startup auth refresh: token synced from Keychain');
+    } else {
+      logger.warn(
+        { error: refresh.error },
+        'Startup auth refresh: could not sync token — first message may 401 and auto-recover',
+      );
+    }
+  }
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {

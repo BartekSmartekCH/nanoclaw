@@ -21,30 +21,44 @@ const ENV_KEY = 'CLAUDE_CODE_OAUTH_TOKEN';
 async function readKeychainToken(): Promise<string | null> {
   if (process.platform !== 'darwin') return null;
 
-  try {
-    const { stdout } = await execFileAsync('security', [
-      'find-generic-password',
-      '-s',
-      'Claude Code-credentials',
-      '-w',
-    ]);
+  // Check both service names (mirrors getFreshKeychainToken in credential-proxy)
+  const services = [
+    'Claude Code-credentials-6b0d98c8',
+    'Claude Code-credentials',
+  ];
+  let bestToken: string | null = null;
+  let bestExpiry = 0;
 
-    const raw = stdout.trim();
-    if (!raw) return null;
+  for (const svc of services) {
+    try {
+      const { stdout } = await execFileAsync('security', [
+        'find-generic-password',
+        '-s',
+        svc,
+        '-w',
+      ]);
 
-    // Keychain stores JSON: { claudeAiOauth: { accessToken: "sk-ant-oat01-..." } }
-    const parsed = JSON.parse(raw);
-    const token = parsed?.claudeAiOauth?.accessToken;
-    if (!token || typeof token !== 'string') {
-      logger.warn('Keychain credential missing claudeAiOauth.accessToken');
-      return null;
+      const raw = stdout.trim();
+      if (!raw) continue;
+
+      const parsed = JSON.parse(raw);
+      const oauth = parsed?.claudeAiOauth;
+      if (!oauth?.accessToken || typeof oauth.accessToken !== 'string')
+        continue;
+      const expiresAt: number = oauth.expiresAt ?? 0;
+      if (expiresAt > Date.now() && expiresAt > bestExpiry) {
+        bestToken = oauth.accessToken;
+        bestExpiry = expiresAt;
+      }
+    } catch {
+      // keychain entry missing or parse error — skip
     }
-
-    return token;
-  } catch (err) {
-    logger.warn({ err }, 'Failed to read token from Keychain');
-    return null;
   }
+
+  if (!bestToken) {
+    logger.warn('No valid (non-expired) OAuth token found in Keychain');
+  }
+  return bestToken;
 }
 
 /**

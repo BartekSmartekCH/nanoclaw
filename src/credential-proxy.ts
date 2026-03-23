@@ -13,9 +13,43 @@
 import { createServer, Server } from 'http';
 import { request as httpsRequest } from 'https';
 import { request as httpRequest, RequestOptions } from 'http';
+import { execSync } from 'child_process';
 
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
+
+/**
+ * Read the freshest valid OAuth token from macOS Keychain.
+ * Claude Code stores credentials under two service names; pick whichever
+ * has the latest non-expired expiresAt.  Falls back to undefined so callers
+ * can fall through to .env.
+ */
+function getFreshKeychainToken(): string | undefined {
+  const services = ['Claude Code-credentials-6b0d98c8', 'Claude Code-credentials'];
+  let bestToken: string | undefined;
+  let bestExpiry = 0;
+
+  for (const svc of services) {
+    try {
+      const raw = execSync(
+        `security find-generic-password -s ${JSON.stringify(svc)} -w 2>/dev/null`,
+        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
+      ).trim();
+      const data = JSON.parse(raw);
+      const oauth = data?.claudeAiOauth;
+      if (!oauth?.accessToken) continue;
+      const expiresAt: number = oauth.expiresAt ?? 0;
+      if (expiresAt > Date.now() && expiresAt > bestExpiry) {
+        bestToken = oauth.accessToken;
+        bestExpiry = expiresAt;
+      }
+    } catch {
+      // keychain entry missing or parse error — skip
+    }
+  }
+
+  return bestToken;
+}
 
 export type AuthMode = 'api-key' | 'oauth';
 
@@ -51,7 +85,9 @@ export function startCredentialProxy(
           ? 'api-key'
           : 'oauth';
         const oauthToken =
-          secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.ANTHROPIC_AUTH_TOKEN;
+          getFreshKeychainToken() ||
+          secrets.CLAUDE_CODE_OAUTH_TOKEN ||
+          secrets.ANTHROPIC_AUTH_TOKEN;
 
         const body = Buffer.concat(chunks);
         const headers: Record<string, string | number | string[] | undefined> =
