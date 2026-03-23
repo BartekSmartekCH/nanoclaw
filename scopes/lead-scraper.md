@@ -396,7 +396,33 @@ const SCHEMA = {
 
 ---
 
-## 8. Data Schema (SQLite)
+## 8. Additional Data Sources (from ScrapeNano RFC)
+
+### Brave Search API
+Bartek has API key + credits. Use cases:
+- Search for business directories: `"architects directory" site:pl` → seed URLs for directory scrapers
+- Find company website when only name + city known: `"Studio XYZ" Kraków` → website URL for email extraction
+- Discover additional directories not manually curated
+
+### Ollama Local LLM (extraction fallback)
+When Cheerio CSS selectors fail (site redesign, unusual structure), fall back to local LLM extraction:
+- **Runtime:** Ollama (already installed on Mac mini)
+- **Model:** Llama 3 8B or qwen2.5 (fast, sufficient for structured extraction)
+- **Prompt:** Structured output only — JSON schema `{name, phone, email, address, website}`, never free text
+- **Safety:** HTML stripped to visible text before LLM, max 8,000 chars, system prompt hardcoded
+- **Use sparingly** — Cheerio is faster, cheaper, and more predictable
+
+### SQLite FTS5 (full-text search)
+Add FTS5 virtual table for searching contacts by name, city, etc.:
+```sql
+CREATE VIRTUAL TABLE companies_fts USING fts5(
+  name, city, address, category, content='companies'
+);
+```
+
+---
+
+## 9. Data Schema (SQLite)
 
 ```sql
 CREATE TABLE companies (
@@ -499,7 +525,7 @@ When duplicate found: merge sources, keep richest data (most fields filled).
 
 ---
 
-## 9. Excel Export Format
+## 10. Excel Export Format
 
 ### Filename convention
 ```
@@ -546,7 +572,7 @@ leads_PL_all_nationwide_2026-03-21.xlsx
 
 ---
 
-## 10. Architecture
+## 11. Architecture
 
 ```
 ┌───────────────────────────────────────────────────────┐
@@ -627,7 +653,7 @@ Telegram (send file to user)
 
 ---
 
-## 11. Build Phases
+## 12. Build Phases
 
 ### Phase 1: Foundation + Google Places (Week 1-2)
 - SQLite schema + dedup logic + slug generator
@@ -668,7 +694,7 @@ Telegram (send file to user)
 
 ---
 
-## 12. Telegram Commands
+## 13. Telegram Commands
 
 ```
 Scraping:
@@ -691,7 +717,7 @@ Info:
 
 ---
 
-## 13. Cost Summary
+## 14. Cost Summary
 
 ### Phase 1 (one-time)
 
@@ -716,7 +742,7 @@ No residential proxies needed for Polish sources = major cost saving vs DACH.
 
 ---
 
-## 14. Expected Results
+## 15. Expected Results
 
 | Phase | Companies | With Email | With Phone | Unique to Phase |
 |-------|-----------|-----------|------------|-----------------|
@@ -730,7 +756,7 @@ This system should capture 40-50% of the addressable market.
 
 ---
 
-## 15. Risk Register
+## 16. Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
