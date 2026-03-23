@@ -1,6 +1,8 @@
+import { execFile } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { promisify } from 'util';
 
 import {
   IMAGE_PROCESSOR_ENABLED,
@@ -9,6 +11,8 @@ import {
   OLLAMA_MODEL,
 } from './config.js';
 import { logger } from './logger.js';
+
+const execFileAsync = promisify(execFile);
 
 // --- Types ---
 
@@ -152,6 +156,24 @@ export function cleanupImageTemp(): void {
   }
 }
 
+// --- PDF → JPEG conversion (macOS sips) ---
+
+async function convertPdfToJpeg(pdfPath: string): Promise<string> {
+  const jpegPath = pdfPath.replace(/\.pdf$/i, '-p1.jpg');
+  await execFileAsync('sips', [
+    '-s',
+    'format',
+    'jpeg',
+    '-s',
+    'formatOptions',
+    '85',
+    pdfPath,
+    '--out',
+    jpegPath,
+  ]);
+  return jpegPath;
+}
+
 // --- Apple Vision OCR ---
 
 export async function extractTextAppleVision(
@@ -269,8 +291,37 @@ export async function processImage(
 ): Promise<ImageProcessorResult | null> {
   if (!IMAGE_PROCESSOR_AVAILABLE) return null;
 
-  const ocrText = (await extractTextAppleVision(imagePath)) || '';
-  const analysis = await analyzeViaOllama(imagePath, ocrText);
+  // mac-system-ocr only supports image formats — convert PDF first
+  let workingPath = imagePath;
+  let convertedPath: string | null = null;
+
+  if (/\.pdf$/i.test(imagePath)) {
+    try {
+      convertedPath = await convertPdfToJpeg(imagePath);
+      workingPath = convertedPath;
+      logger.debug(
+        { pdfPath: imagePath, jpegPath: workingPath },
+        'PDF converted to JPEG for OCR',
+      );
+    } catch (err) {
+      logger.warn(
+        { imagePath, err },
+        'PDF→JPEG conversion failed, skipping OCR',
+      );
+    }
+  }
+
+  const ocrText = (await extractTextAppleVision(workingPath)) || '';
+  const analysis = await analyzeViaOllama(workingPath, ocrText);
+
+  // Clean up converted file
+  if (convertedPath) {
+    try {
+      fs.unlinkSync(convertedPath);
+    } catch {
+      /* ignore */
+    }
+  }
 
   return {
     processedAt: new Date().toISOString(),
