@@ -31,7 +31,7 @@ export interface ImageProcessorResult {
 // --- Constants ---
 
 const STALE_FILE_AGE = 60 * 60 * 1000; // 1 hour
-const OLLAMA_TIMEOUT = 60_000;
+const OLLAMA_TIMEOUT = 120_000;
 const OLLAMA_CHECK_TIMEOUT = 3_000;
 const IPC_DIR = path.resolve(process.cwd(), 'data', 'ipc', 'files');
 

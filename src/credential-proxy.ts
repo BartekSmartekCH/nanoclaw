@@ -25,7 +25,10 @@ import { logger } from './logger.js';
  * can fall through to .env.
  */
 function getFreshKeychainToken(): string | undefined {
-  const services = ['Claude Code-credentials-6b0d98c8', 'Claude Code-credentials'];
+  const services = [
+    'Claude Code-credentials-6b0d98c8',
+    'Claude Code-credentials',
+  ];
   let bestToken: string | undefined;
   let bestExpiry = 0;
 

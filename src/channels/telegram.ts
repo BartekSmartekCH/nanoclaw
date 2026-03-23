@@ -752,7 +752,10 @@ export class TelegramChannel implements Channel {
       { command: 'status', description: 'System health check' },
       { command: 'dev', description: 'Assemble dev team for a task' },
       { command: 'text', description: 'Toggle text-only / voice mirror mode' },
-      { command: 'model', description: 'Switch AI model (sonnet/opus/haiku/ollama)' },
+      {
+        command: 'model',
+        description: 'Switch AI model (sonnet/opus/haiku/ollama)',
+      },
     ];
     this.bot.api
       .setMyCommands(defaultCommands)
