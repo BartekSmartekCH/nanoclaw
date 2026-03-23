@@ -1,5 +1,6 @@
 import fs from 'fs';
 import https from 'https';
+import path from 'path';
 import { Api, Bot, InputFile } from 'grammy';
 
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
@@ -311,7 +312,10 @@ export class TelegramChannel implements Channel {
         }
       }
 
-      lines.push(`Auth: ${auth.ok ? 'OK' : `FAILED — ${auth.error}`}`);
+      const authText = auth.ok
+        ? 'OK'
+        : `FAILED — ${auth.error?.replace(/_/g, '\\_')}`;
+      lines.push(`Auth: ${authText}`);
 
       ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
     });
@@ -673,6 +677,69 @@ export class TelegramChannel implements Channel {
         }
         return;
       }
+      // Binary document types: save to group folder so the agent can access them
+      const SAVE_TO_GROUP_MIMES = [
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+      ];
+      const SAVE_TO_GROUP_EXTS = ['.pptx', '.xlsx', '.docx', '.potx'];
+      const ext = path.extname(name).toLowerCase();
+      if (
+        SAVE_TO_GROUP_MIMES.includes(mime) ||
+        SAVE_TO_GROUP_EXTS.includes(ext)
+      ) {
+        const chatJid = `tg:${ctx.chat.id}`;
+        const group = this.opts.registeredGroups()[chatJid];
+        if (group) {
+          try {
+            const doc = ctx.message.document!;
+            const file = await ctx.api.getFile(doc.file_id);
+            if (file.file_path) {
+              const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+              const res = await fetch(fileUrl);
+              const buffer = Buffer.from(await res.arrayBuffer());
+              const groupDir = path.resolve('groups', group.folder);
+              const savePath = path.join(groupDir, name);
+              fs.mkdirSync(groupDir, { recursive: true });
+              fs.writeFileSync(savePath, buffer);
+              logger.info(
+                { chatJid, name, groupDir },
+                'Document saved to group folder',
+              );
+
+              const msgId = ctx.message.message_id.toString();
+              const timestamp = new Date(ctx.message.date * 1000).toISOString();
+              const senderName =
+                ctx.from?.first_name ||
+                ctx.from?.username ||
+                ctx.from?.id?.toString() ||
+                'Unknown';
+              const caption = ctx.message.caption
+                ? `\n${ctx.message.caption}`
+                : '';
+              this.opts.onMessage(chatJid, {
+                id: msgId,
+                chat_jid: chatJid,
+                sender: ctx.from?.id?.toString() || '',
+                sender_name: senderName,
+                content: `[File saved: ${name} → /workspace/group/${name}]${caption}`,
+                timestamp,
+                is_from_me: false,
+              });
+            }
+          } catch (err) {
+            logger.error(
+              { err, name },
+              'Error saving document to group folder',
+            );
+            storeNonText(ctx, `[Document: ${name}]`);
+          }
+        } else {
+          storeNonText(ctx, `[Document: ${name}]`);
+        }
+        return;
+      }
       if (
         !IMAGE_PROCESSOR_AVAILABLE ||
         (!mime.startsWith('image/') && mime !== 'application/pdf')
@@ -840,6 +907,30 @@ export class TelegramChannel implements Channel {
       logger.info({ jid }, 'Telegram voice message sent');
     } catch (err) {
       logger.error({ jid, err }, 'Failed to send Telegram voice message');
+    }
+  }
+
+  async sendDocument(
+    jid: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<void> {
+    if (!this.bot) {
+      logger.warn('Telegram bot not initialized');
+      return;
+    }
+
+    try {
+      const numericId = jid.replace(/^tg:/, '');
+      const fileName = path.basename(filePath);
+      await this.bot.api.sendDocument(
+        numericId,
+        new InputFile(filePath, fileName),
+        caption ? { caption } : undefined,
+      );
+      logger.info({ jid, fileName }, 'Telegram document sent');
+    } catch (err) {
+      logger.error({ jid, err }, 'Failed to send Telegram document');
     }
   }
 

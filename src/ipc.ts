@@ -14,6 +14,11 @@ import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
+  sendDocument: (
+    jid: string,
+    filePath: string,
+    caption?: string,
+  ) => Promise<void>;
   registeredGroups: () => Record<string, RegisteredGroup>;
   registerGroup: (jid: string, group: RegisteredGroup) => void;
   syncGroups: (force: boolean) => Promise<void>;
@@ -123,6 +128,75 @@ export function startIpcWatcher(deps: IpcDeps): void {
         logger.error(
           { err, sourceGroup },
           'Error reading IPC messages directory',
+        );
+      }
+
+      // Process file-send requests from this group's IPC directory
+      const filesDir = path.join(ipcBaseDir, sourceGroup, 'files_out');
+      try {
+        if (fs.existsSync(filesDir)) {
+          const fileReqs = fs
+            .readdirSync(filesDir)
+            .filter((f) => f.endsWith('.json'));
+          for (const file of fileReqs) {
+            const reqPath = path.join(filesDir, file);
+            try {
+              const data = JSON.parse(fs.readFileSync(reqPath, 'utf-8'));
+              if (data.type === 'send_file' && data.chatJid && data.filePath) {
+                const targetGroup = registeredGroups[data.chatJid];
+                if (
+                  isMain ||
+                  (targetGroup && targetGroup.folder === sourceGroup)
+                ) {
+                  // Resolve file path relative to group folder
+                  const groupDir = path.resolve('groups', sourceGroup);
+                  const resolvedPath = path.resolve(groupDir, data.filePath);
+                  // Security: ensure resolved path is within the group folder
+                  if (!resolvedPath.startsWith(groupDir + path.sep)) {
+                    logger.warn(
+                      { resolvedPath, groupDir, sourceGroup },
+                      'IPC send_file path traversal blocked',
+                    );
+                  } else if (!fs.existsSync(resolvedPath)) {
+                    logger.warn(
+                      { resolvedPath, sourceGroup },
+                      'IPC send_file: file not found',
+                    );
+                  } else {
+                    await deps.sendDocument(
+                      data.chatJid,
+                      resolvedPath,
+                      data.caption,
+                    );
+                    logger.info(
+                      {
+                        chatJid: data.chatJid,
+                        file: path.basename(resolvedPath),
+                        sourceGroup,
+                      },
+                      'IPC file sent',
+                    );
+                  }
+                } else {
+                  logger.warn(
+                    { chatJid: data.chatJid, sourceGroup },
+                    'Unauthorized IPC send_file attempt blocked',
+                  );
+                }
+              }
+              fs.unlinkSync(reqPath);
+            } catch (err) {
+              logger.error(
+                { file, sourceGroup, err },
+                'Error processing IPC file-send request',
+              );
+            }
+          }
+        }
+      } catch (err) {
+        logger.error(
+          { err, sourceGroup },
+          'Error reading IPC files_out directory',
         );
       }
 

@@ -14,6 +14,7 @@ import { CronExpressionParser } from 'cron-parser';
 const IPC_DIR = '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
 const TASKS_DIR = path.join(IPC_DIR, 'tasks');
+const FILES_OUT_DIR = path.join(IPC_DIR, 'files_out');
 
 // Context from environment variables (set by the agent runner)
 const chatJid = process.env.NANOCLAW_CHAT_JID!;
@@ -330,6 +331,42 @@ Use available_groups.json to find the JID for a group. The folder name must be c
     return {
       content: [{ type: 'text' as const, text: `Group "${args.name}" registered. It will start receiving messages immediately.` }],
     };
+  },
+);
+
+server.tool(
+  'send_file',
+  `Send a file as a Telegram document attachment. First write the file to /workspace/group/ using the Write tool, then call this to deliver it. Supports any file type (.txt, .pdf, .json, etc). The file path must be relative to /workspace/group/.
+
+Example workflow:
+1. Write file: write "hello world" to /workspace/group/output.txt
+2. Send it: send_file({ file_path: "output.txt", caption: "Here's your file" })`,
+  {
+    file_path: z.string().describe('Path to the file relative to /workspace/group/ (e.g., "output.txt", "report.json")'),
+    caption: z.string().optional().describe('Optional caption to display with the file'),
+  },
+  async (args) => {
+    // Verify the file exists before creating IPC request
+    const fullPath = path.join('/workspace/group', args.file_path);
+    if (!fs.existsSync(fullPath)) {
+      return {
+        content: [{ type: 'text' as const, text: `File not found: ${fullPath}. Write the file first, then call send_file.` }],
+        isError: true,
+      };
+    }
+
+    const data: Record<string, string | undefined> = {
+      type: 'send_file',
+      chatJid,
+      filePath: args.file_path,
+      caption: args.caption || undefined,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(FILES_OUT_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: `File "${args.file_path}" queued for delivery.` }] };
   },
 );
 

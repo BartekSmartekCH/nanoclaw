@@ -91,6 +91,8 @@ export interface Channel {
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
   // Optional: send a voice note (OGG opus file).
   sendVoice?(jid: string, audioPath: string): Promise<void>;
+  // Optional: send a document (file attachment).
+  sendDocument?(jid: string, filePath: string, caption?: string): Promise<void>;
   // Optional: sync group/chat names from the platform.
   syncGroups?(force: boolean): Promise<void>;
 }
