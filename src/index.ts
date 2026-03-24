@@ -78,7 +78,7 @@ import {
   synthesize,
 } from './voice.js';
 import { checkImageTools, cleanupImageTemp } from './image-processor.js';
-import { refreshOAuthToken } from './credential-refresh.js';
+import { refreshOAuthToken, runClaudePing } from './credential-refresh.js';
 import { logger } from './logger.js';
 
 // Re-export for backwards compatibility during refactor
@@ -387,12 +387,13 @@ async function processGroupMessages(
       return true;
     }
 
-    // Auth error auto-recovery: refresh token from Keychain and retry once
+    // Auth error auto-recovery: ping CLI to refresh token, sync to .env, retry once
     if (isAuthError(lastErrorText) && !_retryAfterRefresh) {
       logger.warn(
         { group: group.name },
-        'Auth error detected, attempting token refresh from Keychain',
+        'Auth error detected, running Claude CLI ping to refresh OAuth token',
       );
+      await runClaudePing();
       const refresh = await refreshOAuthToken();
       if (refresh.success) {
         logger.info(
@@ -714,8 +715,9 @@ async function main(): Promise<void> {
     PROXY_BIND_HOST,
   );
 
-  // Proactive auth: sync Keychain token to .env before any messages are processed
+  // Proactive auth: ping Claude CLI to refresh OAuth token, then sync to .env
   {
+    await runClaudePing();
     const refresh = await refreshOAuthToken();
     if (refresh.success) {
       logger.info('Startup auth refresh: token synced from Keychain');
