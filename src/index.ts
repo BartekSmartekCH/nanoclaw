@@ -322,6 +322,16 @@ async function processGroupMessages(
       // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.length} chars`);
+
+      // Auth errors sometimes surface as status:success with the error in result.
+      // Intercept before forwarding so the recovery path can ping + retry.
+      if (isAuthError(raw)) {
+        hadError = true;
+        lastErrorText = raw;
+        resetIdleTimer();
+        return;
+      }
+
       if (text) {
         await channel.sendMessage(chatJid, text);
         outputSentToUser = true;
