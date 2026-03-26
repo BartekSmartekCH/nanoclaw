@@ -14,23 +14,36 @@ const execFileAsync = promisify(execFile);
 
 const ENV_KEY = 'CLAUDE_CODE_OAUTH_TOKEN';
 
-const CLAUDE_CLI = process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
+const CLAUDE_CLI =
+  process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
 
 /**
  * Run `claude -p ping` to trigger the OAuth refresh token flow.
  * The CLI exchanges the long-lived refresh token for a new access token
  * and writes it back to the macOS Keychain.
  */
-export async function runClaudePing(): Promise<{ success: boolean; error?: string }> {
+export async function runClaudePing(): Promise<{
+  success: boolean;
+  error?: string;
+}> {
   try {
-    await execFileAsync(CLAUDE_CLI, ['--print', 'ping', '--dangerously-skip-permissions'], {
-      timeout: 30000,
-    });
-    logger.info('Claude CLI ping succeeded — OAuth token refreshed in Keychain');
+    await execFileAsync(
+      CLAUDE_CLI,
+      ['--print', 'ping', '--dangerously-skip-permissions'],
+      {
+        timeout: 30000,
+      },
+    );
+    logger.info(
+      'Claude CLI ping succeeded — OAuth token refreshed in Keychain',
+    );
     return { success: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    logger.warn({ err }, 'Claude CLI ping failed — interactive re-auth may be required');
+    logger.warn(
+      { err },
+      'Claude CLI ping failed — interactive re-auth may be required',
+    );
     return { success: false, error: msg };
   }
 }

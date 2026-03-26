@@ -59,6 +59,28 @@ systemctl --user restart nanoclaw
 
 **WhatsApp not connecting after upgrade:** WhatsApp is now a separate channel fork, not bundled in core. Run `/add-whatsapp` (or `git remote add whatsapp https://github.com/qwibitai/nanoclaw-whatsapp.git && git fetch whatsapp main && (git merge whatsapp/main || { git checkout --theirs package-lock.json && git add package-lock.json && git merge --continue; }) && npm run build`) to install it. Existing auth credentials and groups are preserved.
 
+## New Group Checklist
+
+After registering any new group, always add a weekly memory reindex scheduler entry to the DB:
+
+```bash
+sqlite3 /Users/tataadmin/nanoclaw/store/messages.db "
+INSERT INTO scheduled_tasks (id, group_folder, chat_jid, prompt, schedule_type, schedule_value, next_run, status, created_at)
+VALUES (
+  'memory-reindex-{folder}',
+  '{folder}',
+  '{jid}',
+  'Run the memory indexer to rebuild the conversation archive index. Execute: python3 /home/node/.claude/skills/memory-search/indexer.py --group {folder} --base /workspace/project',
+  'cron',
+  '0 3 * * 0',
+  '{next_sunday_3am}',
+  'pending',
+  datetime(''now'')
+);"
+```
+
+Replace `{folder}` with the group folder name (e.g. `telegram_main`) and `{jid}` with the group JID from `registered_groups`. Without this entry, the group's conversations are never indexed and agents cannot do semantic recall over past sessions.
+
 ## Container Build Cache
 
 The container buildkit caches the build context aggressively. `--no-cache` alone does NOT invalidate COPY steps — the builder's volume retains stale files. To force a truly clean rebuild, prune the builder then re-run `./container/build.sh`.

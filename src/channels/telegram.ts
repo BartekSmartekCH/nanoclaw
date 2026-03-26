@@ -4,7 +4,11 @@ import path from 'path';
 import { Api, Bot, InputFile } from 'grammy';
 
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
-import { checkAuthHealth, refreshOAuthToken, runClaudePing } from '../credential-refresh.js';
+import {
+  checkAuthHealth,
+  refreshOAuthToken,
+  runClaudePing,
+} from '../credential-refresh.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import {
