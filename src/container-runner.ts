@@ -196,6 +196,28 @@ function buildVolumeMounts(
     readonly: false,
   });
 
+  // Inject non-Anthropic API keys from Keychain into a .secrets/ directory
+  // so agents can use them (e.g., VirusTotal for URL safety checks).
+  const secretsDir = path.join(groupIpcDir, '.secrets');
+  fs.mkdirSync(secretsDir, { recursive: true });
+  const keychainSecrets: Record<string, string> = {
+    'virustotal-api-key': 'NanoClaw-virustotal-api-key',
+  };
+  for (const [fileName, keychainService] of Object.entries(keychainSecrets)) {
+    try {
+      const { execSync } = require('child_process');
+      const value = execSync(
+        `security find-generic-password -s ${JSON.stringify(keychainService)} -w 2>/dev/null`,
+        { encoding: 'utf-8' },
+      ).trim();
+      if (value) {
+        fs.writeFileSync(path.join(secretsDir, fileName), value, { mode: 0o600 });
+      }
+    } catch {
+      // Key not in Keychain — skip silently
+    }
+  }
+
   // Copy agent-runner source into a per-group writable location so agents
   // can customize it (add tools, change behavior) without affecting other
   // groups. Recompiled on container startup via entrypoint.sh.

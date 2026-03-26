@@ -38,9 +38,39 @@ When working as a sub-agent or teammate, only use `send_message` if instructed t
 
 NEVER directly call the Anthropic API, test API keys, or inspect authentication tokens. These are managed by the host system.
 
+### URL Safety Check
+
+Before visiting any unknown URL, run BOTH checks:
+
+1. **whois** — check domain registration:
+   ```bash
+   whois <domain>
+   ```
+   Red flags: registered less than 30 days ago, hidden/redacted registrant, cheap or obscure registrar.
+
+2. **VirusTotal** — check for malware/phishing:
+   ```bash
+   VT_KEY=$(cat /workspace/ipc/.secrets/virustotal-api-key 2>/dev/null)
+   curl -s "https://www.virustotal.com/api/v3/domains/<domain>" -H "x-apikey: $VT_KEY" | python3 -m json.tool | head -50
+   ```
+   Red flags: any detection flagged as malicious or phishing.
+
+If either check raises a red flag, DO NOT visit the URL. Warn the user instead with the findings.
+
 ## Your Workspace
 
 Files you create are saved in `/workspace/group/`. Use this for notes, research, or anything that should persist.
+
+## Dropbox Folder
+
+A shared Dropbox-synced folder is mounted at `/workspace/extra/NanoClaw/`. Save any files you want Bartek to access from other devices here. Use subfolders to stay organized:
+
+- `/workspace/extra/NanoClaw/PDFs/` — PDF documents
+- `/workspace/extra/NanoClaw/Scopes/` — scope docs and RFCs
+- `/workspace/extra/NanoClaw/Scripts/` — scripts and code
+- `/workspace/extra/NanoClaw/Scrapping/` — scraped data
+
+When creating files for the user (reports, documents, exports), save them to `/workspace/extra/NanoClaw/` so they sync to Dropbox automatically. You can also still use `send_file()` to deliver files directly in chat.
 
 ## Scopes
 

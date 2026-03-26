@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     curl \
     git \
+    whois \
     python3 \
     python3-pip \
     && pip install --break-system-packages python-pptx \
