@@ -211,7 +211,9 @@ function buildVolumeMounts(
         { encoding: 'utf-8' },
       ).trim();
       if (value) {
-        fs.writeFileSync(path.join(secretsDir, fileName), value, { mode: 0o600 });
+        fs.writeFileSync(path.join(secretsDir, fileName), value, {
+          mode: 0o600,
+        });
       }
     } catch {
       // Key not in Keychain — skip silently

@@ -257,6 +257,9 @@ export async function processTaskIpc(
     trigger?: string;
     requiresTrigger?: boolean;
     containerConfig?: RegisteredGroup['containerConfig'];
+    // For run_applescript
+    script?: string;
+    resultPath?: string;
   },
   sourceGroup: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
@@ -566,6 +569,39 @@ export async function processTaskIpc(
         );
       }
       break;
+
+    case 'run_applescript': {
+      if (process.platform !== 'darwin') {
+        logger.warn({ sourceGroup }, 'run_applescript: not on macOS, skipping');
+        break;
+      }
+      if (!data.script || typeof data.script !== 'string') {
+        logger.warn({ sourceGroup }, 'run_applescript: missing script field');
+        break;
+      }
+      try {
+        const { execSync } = await import('child_process');
+        const os = await import('os');
+        const path = await import('path');
+        const tmpFile = path.join(os.tmpdir(), `nanoclaw_as_${Date.now()}.scpt`);
+        fs.writeFileSync(tmpFile, data.script as string);
+        try {
+          execSync(`osascript ${tmpFile}`, { timeout: 30_000 });
+        } finally {
+          try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+        }
+        if (data.resultPath) {
+          fs.writeFileSync(data.resultPath as string, JSON.stringify({ success: true }));
+        }
+        logger.info({ sourceGroup }, 'run_applescript: executed successfully');
+      } catch (err) {
+        logger.error({ sourceGroup, err }, 'run_applescript: execution failed');
+        if (data.resultPath) {
+          fs.writeFileSync(data.resultPath as string, JSON.stringify({ success: false, error: String(err) }));
+        }
+      }
+      break;
+    }
 
     default:
       logger.warn({ type: data.type }, 'Unknown IPC task type');
