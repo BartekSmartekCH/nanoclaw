@@ -543,33 +543,6 @@ export async function processTaskIpc(
       }
       break;
 
-    case 'refresh_auth':
-      if (isMain) {
-        logger.info({ sourceGroup }, 'Auth refresh requested via IPC');
-        const result = await refreshOAuthToken();
-        if (result.success) {
-          logger.info('Auth token refreshed via IPC');
-        } else {
-          logger.error({ error: result.error }, 'Auth refresh via IPC failed');
-        }
-        // Write result so external tools can check the outcome
-        const resultDir = path.join(DATA_DIR, 'ipc', 'results');
-        fs.mkdirSync(resultDir, { recursive: true });
-        fs.writeFileSync(
-          path.join(resultDir, 'refresh_auth.json'),
-          JSON.stringify({
-            ...result,
-            timestamp: new Date().toISOString(),
-          }),
-        );
-      } else {
-        logger.warn(
-          { sourceGroup },
-          'Unauthorized refresh_auth attempt blocked',
-        );
-      }
-      break;
-
     case 'run_applescript': {
       if (process.platform !== 'darwin') {
         logger.warn({ sourceGroup }, 'run_applescript: not on macOS, skipping');
@@ -583,21 +556,34 @@ export async function processTaskIpc(
         const { execSync } = await import('child_process');
         const os = await import('os');
         const path = await import('path');
-        const tmpFile = path.join(os.tmpdir(), `nanoclaw_as_${Date.now()}.scpt`);
+        const tmpFile = path.join(
+          os.tmpdir(),
+          `nanoclaw_as_${Date.now()}.scpt`,
+        );
         fs.writeFileSync(tmpFile, data.script as string);
         try {
           execSync(`osascript ${tmpFile}`, { timeout: 30_000 });
         } finally {
-          try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+          try {
+            fs.unlinkSync(tmpFile);
+          } catch {
+            /* ignore */
+          }
         }
         if (data.resultPath) {
-          fs.writeFileSync(data.resultPath as string, JSON.stringify({ success: true }));
+          fs.writeFileSync(
+            data.resultPath as string,
+            JSON.stringify({ success: true }),
+          );
         }
         logger.info({ sourceGroup }, 'run_applescript: executed successfully');
       } catch (err) {
         logger.error({ sourceGroup, err }, 'run_applescript: execution failed');
         if (data.resultPath) {
-          fs.writeFileSync(data.resultPath as string, JSON.stringify({ success: false, error: String(err) }));
+          fs.writeFileSync(
+            data.resultPath as string,
+            JSON.stringify({ success: false, error: String(err) }),
+          );
         }
       }
       break;

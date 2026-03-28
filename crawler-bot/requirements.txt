@@ -1,0 +1,5 @@
+# TataNano Scraper — Python dependencies
+python-telegram-bot==21.6
+requests==2.31.0
+python-dotenv==1.0.0
+openpyxl==3.1.2
