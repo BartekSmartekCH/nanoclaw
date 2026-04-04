@@ -9,6 +9,11 @@ store/
 data/
 logs/
 
+# Bot runtime files
+bart-bot/package-lock.json
+mama-bot/package-lock.json
+mama-bot/config.json
+
 # Groups - only track base structure and specific CLAUDE.md files
 groups/*
 !groups/main/
