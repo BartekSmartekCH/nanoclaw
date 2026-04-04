@@ -3,10 +3,45 @@ import fs from 'fs'
 import path from 'path'
 import { log } from './logger.js'
 
+const NANOCLAW_DIR = '/Users/tataadmin/nanoclaw'
+const CODER_CONVERSATIONS_DIR = path.join(NANOCLAW_DIR, 'groups', 'coder', 'conversations')
+const CODER_INDEX_DIR = path.join(NANOCLAW_DIR, 'groups', 'coder', 'memory-index')
+const INDEXER_PATH = path.join(NANOCLAW_DIR, 'container', 'skills', 'memory-search', 'indexer.py')
+
+function archiveSession(prompt: string, response: string): void {
+  try {
+    fs.mkdirSync(CODER_CONVERSATIONS_DIR, { recursive: true })
+    const date = new Date().toISOString().slice(0, 10)
+    const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Zurich' })
+    const file = path.join(CODER_CONVERSATIONS_DIR, `${date}.md`)
+    const entry = `\n---\n\n# Conversation\n\nArchived: ${timestamp}\n\n**User**: ${prompt}\n\n**CoderBot**: ${response}\n`
+    fs.appendFileSync(file, entry, 'utf-8')
+    log('INFO', 'Session archived', { file, chars: entry.length })
+  } catch (err) {
+    log('WARN', 'Archive write failed', { err: String(err) })
+  }
+}
+
+function triggerIndexer(): void {
+  try {
+    const proc = spawn('python3', [
+      INDEXER_PATH,
+      '--group', 'coder',
+      '--base', NANOCLAW_DIR,
+      '--index-dir', CODER_INDEX_DIR,
+    ], { detached: true, stdio: 'ignore' })
+    proc.unref()
+    log('INFO', 'Indexer triggered (background)')
+  } catch (err) {
+    log('WARN', 'Indexer trigger failed', { err: String(err) })
+  }
+}
+
 const CLAUDE_CONFIG_DIR = '/Users/tataadmin/.claude-coder'
+const SESSION_FILE = path.join(CLAUDE_CONFIG_DIR, 'coder-session')
 const WORKING_DIR = '/Users/tataadmin/nanoclaw'
 const TIMEOUT_MS = 10 * 60 * 1000
-let isFirstMessage = true
+let isFirstMessage = !fs.existsSync(SESSION_FILE)
 let activeProcess: ChildProcess | null = null
 let currentModel = 'sonnet'
 
@@ -28,7 +63,7 @@ export function isRunning(): boolean { return activeProcess !== null }
 export function abortCurrent(): void {
   if (activeProcess) { activeProcess.kill('SIGTERM'); activeProcess = null }
 }
-export function clearSession(): void { abortCurrent(); isFirstMessage = true; log('INFO', 'Session cleared') }
+export function clearSession(): void { abortCurrent(); isFirstMessage = true; try { fs.unlinkSync(SESSION_FILE) } catch {} log('INFO', 'Session cleared') }
 
 export async function runClaude(prompt: string, onChunk: (text: string) => Promise<void>): Promise<void> {
   if (activeProcess) throw new Error('Claude is already running. Send /abort to cancel.')
@@ -47,17 +82,21 @@ export async function runClaude(prompt: string, onChunk: (text: string) => Promi
       try { await onChunk(toSend) } finally { flushing = false }
     }
   }
-  proc.stdout.on('data', (chunk: Buffer) => { buffer += chunk.toString(); void flushBuffer() })
+  let fullResponse = ''
+  proc.stdout.on('data', (chunk: Buffer) => { const text = chunk.toString(); buffer += text; fullResponse += text; void flushBuffer() })
   proc.stderr.on('data', (chunk: Buffer) => { log('WARN', 'stderr', { text: chunk.toString().trim() }) })
   const timeout = setTimeout(() => { proc.kill(); log('WARN', 'Claude timed out') }, TIMEOUT_MS)
   return new Promise((resolve, reject) => {
     proc.on('close', async (code) => {
-      clearTimeout(timeout); activeProcess = null; isFirstMessage = false
+      clearTimeout(timeout); activeProcess = null; if (isFirstMessage) { isFirstMessage = false; fs.writeFileSync(SESSION_FILE, '') }
       while (flushing) await new Promise(r => setTimeout(r, 50))
       if (buffer) await flushBuffer(true)
       log('INFO', 'Claude exited', { code })
-      if (code === 0 || code === null) resolve()
-      else reject(new Error(`Claude exited with code ${code}`))
+      if (code === 0 || code === null) {
+        archiveSession(prompt, fullResponse.trim())
+        triggerIndexer()
+        resolve()
+      } else reject(new Error(`Claude exited with code ${code}`))
     })
     proc.on('error', (err) => { clearTimeout(timeout); activeProcess = null; reject(err) })
   })
