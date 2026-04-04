@@ -76,6 +76,19 @@ When creating files for the user (reports, documents, exports), save them to `/w
 
 All scope documents, RFCs, and design specs go in `/workspace/project/scopes/`. This is the single shared folder for all bots — never create scopes in your group folder. Use subfolders for multi-file scopes (e.g., `/workspace/project/scopes/my-feature/SCOPE.md`).
 
+## System Manifest
+
+Before making any system-level change (new scheduled task, new bot, config change, code deployment), read `/workspace/project/system-manifest.md`. It tells you:
+- What bots exist and what they do
+- What scheduled tasks are running and at what frequency
+- What has changed recently and who changed it
+
+After making any system-level change, append an entry to the Change Log section of that file.
+
+## CoderBot Memory
+
+CoderBot's coding sessions are archived and indexed. If you need to recall what was built, changed, or decided in a coding session, search `/workspace/project/groups/coder/memory-index/index.json` using the memory-search skill.
+
 ## Memory
 
 The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.
