@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.nanoclaw.mama</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>node</string>
+    <string>/Users/tataadmin/nanoclaw/mama-bot/dist/index.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/tataadmin/nanoclaw/mama-bot</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>/Users/tataadmin</string>
+    <key>PATH</key>
+    <string>/Users/tataadmin/.local/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/tataadmin/Library/Logs/nanoclaw-mama/mama-bot.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/tataadmin/Library/Logs/nanoclaw-mama/mama-bot.log</string>
+</dict>
+</plist>

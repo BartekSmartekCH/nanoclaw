@@ -1,0 +1,20 @@
+{
+  "name": "mama-bot",
+  "version": "1.0.0",
+  "description": "MamaZdrowie — health assistant bot for Mama in Polish",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
