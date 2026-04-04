@@ -86,7 +86,7 @@ VALUES (
   'memory-reindex-{folder}',
   '{folder}',
   '{jid}',
-  'Run the memory indexer to rebuild the conversation archive index. Execute: python3 /home/node/.claude/skills/memory-search/indexer.py --group {folder} --base /workspace/project',
+  'Run the memory indexer to rebuild the conversation archive index. Execute: python3 /home/node/.claude/skills/memory-search/indexer.py --group {folder} --base /workspace/project --index-dir /workspace/group/memory-index',
   'cron',
   '0 3 * * 0',
   '{next_sunday_3am}',

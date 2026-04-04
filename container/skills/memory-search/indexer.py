@@ -3,7 +3,7 @@
 Memory indexer — builds/updates a vector index over conversation archives.
 
 Usage:
-    python3 indexer.py --group telegram_main [--base /path/to/nanoclaw]
+    python3 indexer.py --group telegram_main [--base /path/to/nanoclaw] [--index-dir /path/to/write/index]
 """
 
 import argparse
@@ -75,6 +75,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--group", required=True, help="Group folder name, e.g. telegram_main")
     parser.add_argument("--base", default=None, help="NanoClaw root directory")
+    parser.add_argument("--index-dir", default=None, help="Override directory where the index is written (useful when --base is read-only)")
     args = parser.parse_args()
 
     # Resolve base path
@@ -86,7 +87,7 @@ def main():
         base = Path(__file__).resolve().parents[3]  # container/skills/memory-search/ → root
 
     conversations_dir = base / "groups" / args.group / "conversations"
-    index_dir = base / "groups" / args.group / "memory-index"
+    index_dir = Path(args.index_dir) if args.index_dir else base / "groups" / args.group / "memory-index"
     index_file = index_dir / "index.json"
 
     if not conversations_dir.exists():
