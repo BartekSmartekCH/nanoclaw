@@ -4,10 +4,10 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { readKeychain } from './keychain.js'
 import { log } from './logger.js'
-import { askZofia, type Message } from './claude.js'
+import { askZofia, analyzeFood, type Message } from './claude.js'
 import { textToVoice, cleanupVoiceFile } from './tts.js'
 import { initDb, logGlucose, logMeal, logMedication } from './db.js'
-import { startScheduler } from './scheduler.js'
+import { startScheduler, onMedicationConfirmed } from './scheduler.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -23,11 +23,14 @@ const GROUP_CHAT_ID: number = CONFIG.group_chat_id
 const ALLOWED_IDS = new Set([MAMA_ID, BARTEK_ID])
 
 const GLUCOSE_THRESHOLDS = CONFIG.glucose_thresholds
+const MEDICATIONS: Array<{ name: string; times: string[]; dose: string }> = CONFIG.medications ?? []
 const RATE_LIMIT_PER_MINUTE = 10
 const DAILY_CAP = 100
 const ROLLING_WINDOW = 20
 const MAX_VOICE_DURATION_SECONDS = 120
 const POLL_TIMEOUT = 30
+const PHOTOS_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'data', 'photos')
+const PHOTO_RETENTION_DAYS = 90
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let botToken = ''
@@ -77,6 +80,12 @@ async function getFileUrl(fileId: string): Promise<string> {
   const filePath = res.result?.file_path
   if (!filePath) throw new Error('Could not get file path')
   return `https://api.telegram.org/file/bot${botToken}/${filePath}`
+}
+
+async function downloadFile(url: string): Promise<Buffer> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Download failed: ${res.status}`)
+  return Buffer.from(await res.arrayBuffer())
 }
 
 // ── Limits ────────────────────────────────────────────────────────────────────
@@ -163,6 +172,98 @@ function glucoseComment(value: number): string {
   return `Mierzysz ${value} mg/dL — to jest bardzo wysoki cukier! Bartek już wie. Zadzwoń do lekarza jeśli nie czujesz się dobrze.`
 }
 
+// ── Medication detection ──────────────────────────────────────────────────────
+
+// Fuzzy match: general confirmation words
+const GENERAL_CONFIRM = ['tak', 'yes', 'wzięłam', 'wzialem', 'wziełam', 'brałam', 'bralAM', 'już', 'juz', 'wzielam', 'ok', 'okay']
+
+function detectMedicationConfirmation(text: string): { confirmed: boolean; specific: string | null } {
+  const lower = text.toLowerCase().trim()
+
+  // Check for general confirmation
+  const isGeneral = GENERAL_CONFIRM.some(word => {
+    const w = word.toLowerCase()
+    return lower === w || lower.startsWith(w + ' ') || lower.endsWith(' ' + w) || lower.includes(' ' + w + ' ')
+  })
+
+  if (isGeneral) return { confirmed: true, specific: null }
+
+  // Check for specific medication name mention
+  for (const med of MEDICATIONS) {
+    const name = med.name.toLowerCase()
+    if (lower.includes(name) && (
+      lower.includes('wzięłam') || lower.includes('wzialem') || lower.includes('wziełam') ||
+      lower.includes('brałam') || lower.includes('wzielam') || lower.includes('wzielam') ||
+      lower.includes('biorę') || lower.includes('biore') || lower.includes('już') || lower.includes('juz')
+    )) {
+      return { confirmed: true, specific: med.name }
+    }
+  }
+
+  return { confirmed: false, specific: null }
+}
+
+// ── Food photo handler ────────────────────────────────────────────────────────
+
+async function handleFoodPhoto(
+  chatId: number,
+  fileId: string,
+  mimeType: string,
+): Promise<void> {
+  log('INFO', 'Processing food photo', { fileId })
+
+  let photoBuffer: Buffer
+  let fileUrl: string
+  try {
+    fileUrl = await getFileUrl(fileId)
+    photoBuffer = await downloadFile(fileUrl)
+  } catch (err) {
+    log('ERROR', 'Photo download failed', { err: String(err) })
+    await sendBoth(chatId, 'Mamo, nie mogę odczytać zdjęcia. Spróbuj wysłać ponownie.')
+    return
+  }
+
+  // Save photo locally
+  fs.mkdirSync(PHOTOS_DIR, { recursive: true })
+  const photoFileName = `photo-${Date.now()}.jpg`
+  const photoPath = path.join(PHOTOS_DIR, photoFileName)
+  fs.writeFileSync(photoPath, photoBuffer)
+
+  let analysisText: string
+  let glycemicAssessment: 'low' | 'medium' | 'high' = 'medium'
+  try {
+    const result = await analyzeFood(photoBuffer, mimeType)
+    analysisText = result.text
+    glycemicAssessment = result.glycemicAssessment
+  } catch (err) {
+    log('ERROR', 'Food analysis failed', { err: String(err) })
+    await sendBoth(chatId, 'Mamo, nie mogę przeanalizować tego zdjęcia. Napisz mi co jesz, to powiem Ci co myślę.')
+    return
+  }
+
+  logMeal('(zdjęcie posiłku)', analysisText, photoPath, glycemicAssessment)
+  await sendBoth(chatId, analysisText)
+}
+
+// ── Photo cleanup (90-day retention) ─────────────────────────────────────────
+
+function cleanupOldPhotos(): void {
+  if (!fs.existsSync(PHOTOS_DIR)) return
+  const cutoff = Date.now() - PHOTO_RETENTION_DAYS * 24 * 60 * 60 * 1000
+  let removed = 0
+  for (const file of fs.readdirSync(PHOTOS_DIR)) {
+    const filePath = path.join(PHOTOS_DIR, file)
+    try {
+      const stat = fs.statSync(filePath)
+      if (stat.mtimeMs < cutoff) {
+        fs.unlinkSync(filePath)
+        removed++
+      }
+    } catch { /* ignore */ }
+  }
+  if (removed > 0) log('INFO', `Cleaned up ${removed} old photo(s)`)
+}
+
 // ── Message handler ───────────────────────────────────────────────────────────
 async function handleMessage(
   chatId: number,
@@ -170,6 +271,8 @@ async function handleMessage(
   firstName: string,
   text?: string,
   voice?: { file_id: string; duration: number },
+  photo?: Array<{ file_id: string; width: number; height: number }>,
+  photoMimeType?: string,
 ): Promise<void> {
   if (!ALLOWED_IDS.has(userId)) return
 
@@ -179,6 +282,13 @@ async function handleMessage(
   }
   if (isDailyCapped()) {
     await sendText(chatId, 'Na dziś to już wszystko. Do jutra!')
+    return
+  }
+
+  // Food photo
+  if (photo && photo.length > 0) {
+    const largest = photo[photo.length - 1]
+    await handleFoodPhoto(chatId, largest.file_id, photoMimeType ?? 'image/jpeg')
     return
   }
 
@@ -203,13 +313,30 @@ async function handleMessage(
 
   if (!userMessage.trim()) return
 
-  // Medication confirmation
-  const lowerMsg = userMessage.toLowerCase()
-  if (lowerMsg.includes('wzięłam') || lowerMsg.includes('wzialem') || lowerMsg.includes('wziełam')) {
-    const hour = new Date().getHours()
-    const timeOfDay = hour < 12 ? 'poranne' : 'wieczorne'
-    logMedication(timeOfDay)
-    await sendBoth(chatId, `Świetnie! Zapisałam, że wzięłaś leki ${timeOfDay}. Tak trzymać! 💪`)
+  // Medication confirmation (fuzzy)
+  const { confirmed, specific } = detectMedicationConfirmation(userMessage)
+  if (confirmed) {
+    if (specific) {
+      const med = MEDICATIONS.find(m => m.name === specific)
+      logMedication(specific, med?.dose)
+      onMedicationConfirmed()
+      await sendBoth(chatId, `Świetnie! Zapisałam ${specific}. Tak trzymać! 💊`)
+    } else {
+      // General confirmation — log all medications for current time window
+      const hour = new Date().getHours()
+      const isMorning = hour < 14
+      const medsForNow = MEDICATIONS.filter(m =>
+        m.times.some(t => {
+          const h = parseInt(t.split(':')[0])
+          return isMorning ? h < 14 : h >= 14
+        })
+      )
+      for (const med of medsForNow) {
+        logMedication(med.name, med.dose)
+      }
+      onMedicationConfirmed()
+      await sendBoth(chatId, `Świetnie! Zapisałam leki. Tak trzymać! 💊`)
+    }
     return
   }
 
@@ -219,12 +346,12 @@ async function handleMessage(
     logGlucose(glucoseValue)
     await handleGlucoseAlert(glucoseValue)
     const comment = glucoseComment(glucoseValue)
-    logMeal(userMessage, comment)
     await sendBoth(chatId, comment)
     return
   }
 
   // Meal log detection
+  const lowerMsg = userMessage.toLowerCase()
   if (lowerMsg.includes('jadłam') || lowerMsg.includes('zjadłam') || lowerMsg.includes('piłam') ||
       lowerMsg.includes('jadlem') || lowerMsg.includes('zjadlem')) {
     logMeal(userMessage)
@@ -265,6 +392,8 @@ async function poll(): Promise<void> {
             chat: { id: number }
             text?: string
             voice?: { file_id: string; duration: number }
+            photo?: Array<{ file_id: string; width: number; height: number }>
+            document?: { file_id: string; mime_type?: string }
           }
         }>
       }
@@ -275,7 +404,16 @@ async function poll(): Promise<void> {
         if (!msg) continue
         const userId = msg.from?.id ?? 0
         const firstName = msg.from?.first_name ?? ''
-        await handleMessage(msg.chat.id, userId, firstName, msg.text, msg.voice)
+
+        // Handle document sent as photo (some clients send JPEG as document)
+        let photo = msg.photo
+        let photoMimeType = 'image/jpeg'
+        if (!photo && msg.document?.mime_type?.startsWith('image/')) {
+          photo = [{ file_id: msg.document.file_id, width: 0, height: 0 }]
+          photoMimeType = msg.document.mime_type
+        }
+
+        await handleMessage(msg.chat.id, userId, firstName, msg.text, msg.voice, photo, photoMimeType)
       }
     } catch (err) {
       log('WARN', 'Poll error, retrying in 5s', { err: String(err) })
@@ -298,6 +436,9 @@ async function main(): Promise<void> {
   baseUrl = `https://api.telegram.org/bot${botToken}`
   initDb()
   log('INFO', 'Database initialized')
+
+  // Clean up old photos on startup
+  cleanupOldPhotos()
 
   startScheduler(GROUP_CHAT_ID, BARTEK_ID, async (chatId, text, voiceAlso = false) => {
     if (voiceAlso) {
