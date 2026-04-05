@@ -27,19 +27,16 @@ export function startCredentialProxy(
   port: number,
   host = '127.0.0.1',
 ): Promise<Server> {
-  const secrets = readEnvFile([
+  const startupSecrets = readEnvFile([
     'ANTHROPIC_API_KEY',
-    'CLAUDE_CODE_OAUTH_TOKEN',
-    'ANTHROPIC_AUTH_TOKEN',
     'ANTHROPIC_BASE_URL',
   ]);
 
-  const authMode: AuthMode = secrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
-  const oauthToken =
-    secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.ANTHROPIC_AUTH_TOKEN;
+  // Auth mode is fixed at startup — won't change without a process restart
+  const authMode: AuthMode = startupSecrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
 
   const upstreamUrl = new URL(
-    secrets.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
+    startupSecrets.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
   );
   const isHttps = upstreamUrl.protocol === 'https:';
   const makeRequest = isHttps ? httpsRequest : httpRequest;
@@ -64,14 +61,23 @@ export function startCredentialProxy(
 
         if (authMode === 'api-key') {
           // API key mode: inject x-api-key on every request
+          // Read fresh from .env each time so key rotations take effect immediately
+          const { ANTHROPIC_API_KEY } = readEnvFile(['ANTHROPIC_API_KEY']);
           delete headers['x-api-key'];
-          headers['x-api-key'] = secrets.ANTHROPIC_API_KEY;
+          headers['x-api-key'] = ANTHROPIC_API_KEY;
         } else {
           // OAuth mode: replace placeholder Bearer token with the real one
           // only when the container actually sends an Authorization header
           // (exchange request + auth probes). Post-exchange requests use
           // x-api-key only, so they pass through without token injection.
+          // Read fresh from .env on each exchange so refreshed tokens are picked
+          // up without requiring a proxy restart.
           if (headers['authorization']) {
+            const { CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN } = readEnvFile([
+              'CLAUDE_CODE_OAUTH_TOKEN',
+              'ANTHROPIC_AUTH_TOKEN',
+            ]);
+            const oauthToken = CLAUDE_CODE_OAUTH_TOKEN || ANTHROPIC_AUTH_TOKEN;
             delete headers['authorization'];
             if (oauthToken) {
               headers['authorization'] = `Bearer ${oauthToken}`;
