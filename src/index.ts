@@ -42,12 +42,14 @@ import {
   getMessagesSince,
   getNewMessages,
   getRouterState,
+  getTaskById,
   initDatabase,
   setRegisteredGroup,
   setRouterState,
   setSession,
   storeChatMetadata,
   storeMessage,
+  updateTask,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
@@ -335,6 +337,17 @@ async function processGroupMessages(
         'Idle timeout, closing container stdin',
       );
       queue.closeStdin(chatJid);
+      // Trigger memory reindex immediately so this session is indexed
+      // within the next scheduler poll (~60s) rather than waiting up to 3h.
+      const reindexTaskId = `memory-reindex-${group.folder}`;
+      const reindexTask = getTaskById(reindexTaskId);
+      if (reindexTask?.status === 'active') {
+        updateTask(reindexTaskId, { next_run: new Date().toISOString() });
+        logger.info(
+          { group: group.name },
+          'Triggered memory reindex after idle timeout',
+        );
+      }
     }, IDLE_TIMEOUT);
   };
 

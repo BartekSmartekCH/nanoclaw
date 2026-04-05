@@ -33,7 +33,9 @@ export function startCredentialProxy(
   ]);
 
   // Auth mode is fixed at startup — won't change without a process restart
-  const authMode: AuthMode = startupSecrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
+  const authMode: AuthMode = startupSecrets.ANTHROPIC_API_KEY
+    ? 'api-key'
+    : 'oauth';
 
   const upstreamUrl = new URL(
     startupSecrets.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
@@ -73,10 +75,8 @@ export function startCredentialProxy(
           // Read fresh from .env on each exchange so refreshed tokens are picked
           // up without requiring a proxy restart.
           if (headers['authorization']) {
-            const { CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN } = readEnvFile([
-              'CLAUDE_CODE_OAUTH_TOKEN',
-              'ANTHROPIC_AUTH_TOKEN',
-            ]);
+            const { CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN } =
+              readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_AUTH_TOKEN']);
             const oauthToken = CLAUDE_CODE_OAUTH_TOKEN || ANTHROPIC_AUTH_TOKEN;
             delete headers['authorization'];
             if (oauthToken) {
