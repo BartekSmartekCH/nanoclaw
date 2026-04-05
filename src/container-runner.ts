@@ -117,16 +117,14 @@ function buildVolumeMounts(
     readonly: false,
   });
 
-  // Global memory directory (read-only for non-main)
-  if (!isMain) {
-    const globalDir = path.join(GROUPS_DIR, 'global');
-    if (fs.existsSync(globalDir)) {
-      mounts.push({
-        hostPath: globalDir,
-        containerPath: '/workspace/global',
-        readonly: true,
-      });
-    }
+  // Global memory directory — writable for main (cross-group knowledge), read-only for others
+  const globalDir = path.join(GROUPS_DIR, 'global');
+  if (fs.existsSync(globalDir)) {
+    mounts.push({
+      hostPath: globalDir,
+      containerPath: '/workspace/global',
+      readonly: !isMain,
+    });
   }
 
   // Skills directory (dev access groups only, read-only)
