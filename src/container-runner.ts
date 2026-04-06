@@ -99,6 +99,17 @@ function buildVolumeMounts(
     });
   }
 
+  // Main gets writable access to the store (SQLite DB) so it can
+  // query and write to the database directly.
+  if (isMain) {
+    const storeDir = path.join(projectRoot, 'store');
+    mounts.push({
+      hostPath: storeDir,
+      containerPath: '/workspace/project/store',
+      readonly: false,
+    });
+  }
+
   // Group folder (all groups get their own writable folder)
   mounts.push({
     hostPath: groupDir,
