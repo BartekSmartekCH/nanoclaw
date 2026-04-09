@@ -341,22 +341,59 @@ export class TelegramChannel implements Channel {
       ctx.reply(isTextOnly ? '💬 Text mode on' : '🔁 Mirror mode');
     });
 
-    // /model — switch AI model (sonnet, opus, haiku, ollama)
+    // /model — switch AI model via inline buttons or argument
+    const MODEL_OPTIONS = [
+      { id: 'opus', label: 'Opus', desc: 'Most capable' },
+      { id: 'sonnet', label: 'Sonnet', desc: 'Fast & smart' },
+      { id: 'haiku', label: 'Haiku', desc: 'Fastest' },
+      { id: 'ollama', label: 'Gemma 4 (local)', desc: 'Offline fallback' },
+    ];
+    const validModelIds = MODEL_OPTIONS.map((m) => m.id);
+
     this.bot.command('model', (ctx) => {
       if (!this.opts.switchModel) return;
       const chatJid = `tg:${ctx.chat.id}`;
       const arg = ctx.match?.trim().toLowerCase() || null;
-      const validModels = ['sonnet', 'opus', 'haiku', 'ollama'];
-      if (arg && !validModels.includes(arg)) {
-        ctx.reply(`Valid models: ${validModels.join(', ')}`);
+
+      if (arg) {
+        if (!validModelIds.includes(arg)) {
+          ctx.reply(`Valid models: ${validModelIds.join(', ')}`);
+          return;
+        }
+        const current = this.opts.switchModel(chatJid, arg);
+        ctx.reply(`Switched to *${current}*`, { parse_mode: 'Markdown' });
         return;
       }
-      const current = this.opts.switchModel(chatJid, arg);
-      if (arg) {
-        ctx.reply(`Switched to *${current}*`, { parse_mode: 'Markdown' });
-      } else {
-        ctx.reply(`Current model: *${current}*`, { parse_mode: 'Markdown' });
-      }
+
+      // No argument — show inline keyboard with current model highlighted
+      const current = this.opts.switchModel(chatJid, null);
+      const buttons = MODEL_OPTIONS.map((m) => {
+        const check = m.id === current ? ' \u2713' : '';
+        return [{ text: `${m.label}${check} — ${m.desc}`, callback_data: `model:${m.id}` }];
+      });
+      ctx.reply(`Current model: *${current}*\nSelect a model:`, {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: buttons },
+      });
+    });
+
+    this.bot.on('callback_query:data', async (ctx) => {
+      const data = ctx.callbackQuery.data;
+      if (!data?.startsWith('model:') || !this.opts.switchModel || !ctx.chat) return;
+      const model = data.slice(6);
+      if (!validModelIds.includes(model)) return;
+      const chatJid = `tg:${ctx.chat.id}`;
+      const current = this.opts.switchModel(chatJid, model);
+      await ctx.answerCallbackQuery({ text: `Switched to ${current}` });
+      // Update the message with new selection
+      const buttons = MODEL_OPTIONS.map((m) => {
+        const check = m.id === current ? ' \u2713' : '';
+        return [{ text: `${m.label}${check} — ${m.desc}`, callback_data: `model:${m.id}` }];
+      });
+      await ctx.editMessageText(`Current model: *${current}*\nSelect a model:`, {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: buttons },
+      });
     });
 
     // /abort — kill running container for this group
@@ -854,7 +891,10 @@ export class TelegramChannel implements Channel {
       { command: 'status', description: 'System health check' },
       { command: 'dev', description: 'Assemble dev team for a task' },
       { command: 'text', description: 'Toggle text-only / voice mirror mode' },
-      { command: 'model', description: 'Switch AI model (sonnet/opus/haiku/ollama)' },
+      {
+        command: 'model',
+        description: 'Switch AI model (sonnet/opus/haiku/ollama)',
+      },
       { command: 'abort', description: 'Cancel running agent' },
       { command: 'clear', description: 'Clear session and pending tasks' },
     ];
