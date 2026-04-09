@@ -98,10 +98,13 @@ def main():
         print(f"Failed to embed query: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Score all chunks
+    # Score all chunks with source-based boosting
+    # knowledge > notebook > conversations
+    SOURCE_BOOST = {"knowledge": 0.05, "notebook": 0.03}
     scored = []
     for chunk in chunks:
         score = cosine(query_vec, chunk["vector"])
+        score += SOURCE_BOOST.get(chunk.get("source", ""), 0.0)
         scored.append((score, chunk))
 
     scored.sort(key=lambda x: x[0], reverse=True)

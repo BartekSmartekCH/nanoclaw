@@ -369,7 +369,12 @@ export class TelegramChannel implements Channel {
       const current = this.opts.switchModel(chatJid, null);
       const buttons = MODEL_OPTIONS.map((m) => {
         const check = m.id === current ? ' \u2713' : '';
-        return [{ text: `${m.label}${check} — ${m.desc}`, callback_data: `model:${m.id}` }];
+        return [
+          {
+            text: `${m.label}${check} — ${m.desc}`,
+            callback_data: `model:${m.id}`,
+          },
+        ];
       });
       ctx.reply(`Current model: *${current}*\nSelect a model:`, {
         parse_mode: 'Markdown',
@@ -379,7 +384,8 @@ export class TelegramChannel implements Channel {
 
     this.bot.on('callback_query:data', async (ctx) => {
       const data = ctx.callbackQuery.data;
-      if (!data?.startsWith('model:') || !this.opts.switchModel || !ctx.chat) return;
+      if (!data?.startsWith('model:') || !this.opts.switchModel || !ctx.chat)
+        return;
       const model = data.slice(6);
       if (!validModelIds.includes(model)) return;
       const chatJid = `tg:${ctx.chat.id}`;
@@ -388,12 +394,20 @@ export class TelegramChannel implements Channel {
       // Update the message with new selection
       const buttons = MODEL_OPTIONS.map((m) => {
         const check = m.id === current ? ' \u2713' : '';
-        return [{ text: `${m.label}${check} — ${m.desc}`, callback_data: `model:${m.id}` }];
+        return [
+          {
+            text: `${m.label}${check} — ${m.desc}`,
+            callback_data: `model:${m.id}`,
+          },
+        ];
       });
-      await ctx.editMessageText(`Current model: *${current}*\nSelect a model:`, {
-        parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: buttons },
-      });
+      await ctx.editMessageText(
+        `Current model: *${current}*\nSelect a model:`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: buttons },
+        },
+      );
     });
 
     // /abort — kill running container for this group
@@ -416,6 +430,55 @@ export class TelegramChannel implements Channel {
       }
     });
 
+    // /notebook — save knowledge entries to global sources
+    const SOURCES_DIR = path.join(
+      path.dirname(path.dirname(new URL(import.meta.url).pathname)),
+      'groups',
+      'global',
+      'sources',
+    );
+
+    this.bot.command('notebook', (ctx) => {
+      // Get text from command argument or replied-to message
+      let text = ctx.match?.trim() || '';
+      if (!text && ctx.message?.reply_to_message) {
+        const reply = ctx.message.reply_to_message;
+        text =
+          ('text' in reply ? reply.text : '') ||
+          ('caption' in reply ? reply.caption : '') ||
+          '';
+      }
+      if (!text) {
+        ctx.reply(
+          '*Usage:*\n' +
+            '/notebook <text> — save a knowledge entry\n' +
+            'Reply to a message with /notebook — save that message',
+          { parse_mode: 'Markdown' },
+        );
+        return;
+      }
+
+      try {
+        fs.mkdirSync(SOURCES_DIR, { recursive: true });
+        const now = new Date();
+        const date = now.toISOString().slice(0, 10);
+        const time = now.toISOString().slice(11, 16).replace(':', '');
+        const filename = `notebook-${date}-${time}.md`;
+        const sender = ctx.from?.first_name || 'Unknown';
+        const content =
+          `<!-- saved: ${now.toISOString()} by: ${sender} -->\n\n${text}\n`;
+        fs.writeFileSync(path.join(SOURCES_DIR, filename), content, 'utf-8');
+
+        const count = fs.readdirSync(SOURCES_DIR).filter((f) =>
+          f.endsWith('.md'),
+        ).length;
+        ctx.reply(`📓 Saved to notebook (${count} entries total)`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        ctx.reply(`Failed to save: ${msg}`);
+      }
+    });
+
     // Telegram bot commands handled above — skip them in the general handler
     // so they don't also get stored as messages. All other /commands flow through.
     const TELEGRAM_BOT_COMMANDS = new Set([
@@ -429,6 +492,7 @@ export class TelegramChannel implements Channel {
       'model',
       'abort',
       'clear',
+      'notebook',
     ]);
 
     this.bot.on('message:text', async (ctx) => {
@@ -897,6 +961,7 @@ export class TelegramChannel implements Channel {
       },
       { command: 'abort', description: 'Cancel running agent' },
       { command: 'clear', description: 'Clear session and pending tasks' },
+      { command: 'notebook', description: 'Save text to knowledge base' },
     ];
     this.bot.api
       .setMyCommands(defaultCommands)

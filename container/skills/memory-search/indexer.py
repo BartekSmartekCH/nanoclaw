@@ -289,12 +289,17 @@ def main():
 
     group_dir = base / "groups" / args.group
     conversations_dir = group_dir / "conversations"
+    sources_dir = group_dir / "sources"
+    global_sources_dir = base / "groups" / "global" / "sources"
     knowledge_file = group_dir / "knowledge.md"
     pending_file = group_dir / ".synthesis-pending"
 
-    if not conversations_dir.exists():
-        print(f"No conversations directory at {conversations_dir}, nothing to index.")
-        sys.exit(0)  # Clean exit — not an error
+    has_conversations = conversations_dir.exists()
+    has_sources = sources_dir.exists() or global_sources_dir.exists()
+
+    if not has_conversations and not has_sources:
+        print(f"No conversations or sources to index for {args.group}.")
+        sys.exit(0)
 
     if not check_ollama():
         print("Ollama not ready, skipping indexing.", file=sys.stderr)
@@ -332,9 +337,15 @@ def main():
     synthesized_hashes = index.get("synthesized_hashes", {})
     chunks = index.get("chunks", [])
 
-    md_files = sorted(conversations_dir.glob("*.md"))
-    if not md_files:
-        print("No conversation files found.")
+    # Gather all indexable files: conversations + sources (group + global)
+    md_files = sorted(conversations_dir.glob("*.md")) if has_conversations else []
+    source_files: List[Path] = []
+    for sdir in [sources_dir, global_sources_dir]:
+        if sdir.exists():
+            source_files.extend(sorted(sdir.glob("*.md")))
+
+    if not md_files and not source_files:
+        print("No conversation or source files found.")
         return
 
     new_files_count = 0
@@ -342,10 +353,10 @@ def main():
     skipped_dupes = 0
     newly_indexed: List[Tuple[Path, str]] = []  # (path, date) for synthesis
 
-    # Build content hash set from existing chunks (excluding knowledge source)
+    # Build content hash set from existing chunks (excluding knowledge/notebook sources)
     seen_hashes: set = set()
     for c in chunks:
-        if c.get("source") == "knowledge":
+        if c.get("source") in ("knowledge", "notebook"):
             continue
         text = c.get("full_text", c.get("text", ""))
         seen_hashes.add(content_hash(text))
@@ -402,6 +413,55 @@ def main():
         dupe_note = f" ({file_dupes} dupes skipped)" if file_dupes else ""
         print(f"{len(file_chunks)} chunks, {len(file_chunks) - file_dupes} unique{dupe_note}")
 
+    # --- Phase 1b: Index source files (notebook entries) ---
+    # Sources are curated knowledge — no synthesis needed, tagged as "notebook".
+    new_source_chunks = 0
+    for src_file in source_files:
+        fhash = file_hash(src_file)
+        # Use full path relative to base as key to avoid collisions with conversation filenames
+        fkey = f"src:{src_file.name}"
+
+        if existing_hashes.get(fkey) == fhash:
+            continue
+
+        print(f"Indexing source {src_file.name}...", end=" ", flush=True)
+
+        # Remove old chunks for this source file
+        chunks = [c for c in chunks if c.get("_fkey") != fkey]
+
+        text = src_file.read_text(encoding="utf-8", errors="replace")
+        date_match = re.match(r"notebook-(\d{4}-\d{2}-\d{2})", src_file.name)
+        date = date_match.group(1) if date_match else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        file_chunks = chunk_text(text)
+        for i, chunk_text_item in enumerate(file_chunks):
+            chash = content_hash(chunk_text_item)
+            if chash in seen_hashes:
+                continue
+            try:
+                vector = embed(chunk_text_item)
+            except Exception as e:
+                print(f"\nEmbedding failed for {src_file.name} chunk {i}: {e}", file=sys.stderr)
+                continue
+            seen_hashes.add(chash)
+            chunks.append({
+                "file": src_file.name,
+                "_fkey": fkey,
+                "date": date,
+                "chunk_index": i,
+                "text": chunk_text_item[:500],
+                "full_text": chunk_text_item,
+                "vector": vector,
+                "source": "notebook",
+            })
+            new_source_chunks += 1
+
+        existing_hashes[fkey] = fhash
+        print(f"{len(file_chunks)} chunks")
+
+    if new_source_chunks:
+        print(f"Sources: {new_source_chunks} new chunks indexed")
+
     index["chunks"] = chunks
     index["file_hashes"] = existing_hashes
     index["synthesized_hashes"] = synthesized_hashes
@@ -411,7 +471,8 @@ def main():
     atomic_json_write(index_file, index)
 
     dupe_msg = f", {skipped_dupes} duplicates skipped" if skipped_dupes else ""
-    print(f"\nDone. {new_files_count} files indexed, {new_chunks} new chunks{dupe_msg}. Total: {len(chunks)} chunks.")
+    total_new = new_chunks + new_source_chunks
+    print(f"\nDone. {new_files_count} files indexed, {total_new} new chunks{dupe_msg}. Total: {len(chunks)} chunks.")
     print(f"Index saved to {index_file}")
 
     # --- Phase 2: Synthesis ---
