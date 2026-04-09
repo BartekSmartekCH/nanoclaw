@@ -10,7 +10,7 @@ import {
   IDLE_TIMEOUT,
   MAX_MESSAGES_PER_PROMPT,
   OLLAMA_HOST,
-  OLLAMA_MODEL,
+  OLLAMA_CHAT_MODEL,
   POLL_INTERVAL,
   TELEGRAM_BOT_POOL,
   TIMEZONE,
@@ -524,7 +524,7 @@ async function runOllamaChat(
     const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false }),
+      body: JSON.stringify({ model: OLLAMA_CHAT_MODEL, prompt, stream: false }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -875,55 +875,64 @@ async function main(): Promise<void> {
       // Keychain read failed — use fallback
     }
 
-    setTimeout(async () => {
-      try {
-        await runClaudePing();
-        const refresh = await refreshOAuthToken();
-        if (refresh.success) {
-          // Verify the token actually works
-          const verify = await verifyTokenViaApi(CREDENTIAL_PROXY_PORT);
-          if (verify.ok) {
-            logger.debug('Proactive token refresh: OK (verified)');
+    setTimeout(
+      async () => {
+        try {
+          await runClaudePing();
+          const refresh = await refreshOAuthToken();
+          if (refresh.success) {
+            // Verify the token actually works
+            const verify = await verifyTokenViaApi(CREDENTIAL_PROXY_PORT);
+            if (verify.ok) {
+              logger.debug('Proactive token refresh: OK (verified)');
+            } else {
+              logger.warn(
+                { error: verify.error },
+                'Token refreshed but API verification failed',
+              );
+            }
+            consecutiveRefreshFailures = 0;
+            refreshAlertSent = false;
           } else {
+            consecutiveRefreshFailures++;
             logger.warn(
-              { error: verify.error },
-              'Token refreshed but API verification failed',
+              {
+                error: refresh.error,
+                consecutiveFailures: consecutiveRefreshFailures,
+              },
+              'Proactive token refresh failed',
             );
           }
-          consecutiveRefreshFailures = 0;
-          refreshAlertSent = false;
-        } else {
+        } catch (err) {
           consecutiveRefreshFailures++;
           logger.warn(
-            { error: refresh.error, consecutiveFailures: consecutiveRefreshFailures },
-            'Proactive token refresh failed',
+            { err, consecutiveFailures: consecutiveRefreshFailures },
+            'Proactive token refresh error',
           );
         }
-      } catch (err) {
-        consecutiveRefreshFailures++;
-        logger.warn({ err, consecutiveFailures: consecutiveRefreshFailures }, 'Proactive token refresh error');
-      }
 
-      // Alert after 3 consecutive failures (~2+ hours)
-      if (consecutiveRefreshFailures >= 3 && !refreshAlertSent) {
-        refreshAlertSent = true;
-        const mainJid = Object.entries(registeredGroups).find(
-          ([, g]) => g.isMain,
-        )?.[0];
-        if (mainJid) {
-          const ch = findChannel(channels, mainJid);
-          if (ch) {
-            ch.sendMessage(
-              mainJid,
-              `⚠️ Auth refresh failing repeatedly (${consecutiveRefreshFailures} attempts). Run \`claude\` on the Mac mini to re-authenticate.`,
-            ).catch(() => {});
+        // Alert after 3 consecutive failures (~2+ hours)
+        if (consecutiveRefreshFailures >= 3 && !refreshAlertSent) {
+          refreshAlertSent = true;
+          const mainJid = Object.entries(registeredGroups).find(
+            ([, g]) => g.isMain,
+          )?.[0];
+          if (mainJid) {
+            const ch = findChannel(channels, mainJid);
+            if (ch) {
+              ch.sendMessage(
+                mainJid,
+                `⚠️ Auth refresh failing repeatedly (${consecutiveRefreshFailures} attempts). Run \`claude\` on the Mac mini to re-authenticate.`,
+              ).catch(() => {});
+            }
           }
         }
-      }
 
-      // Schedule the next refresh
-      scheduleNextRefresh();
-    }, Math.max(delayMs, 10000)); // minimum 10s between refreshes
+        // Schedule the next refresh
+        scheduleNextRefresh();
+      },
+      Math.max(delayMs, 10000),
+    ); // minimum 10s between refreshes
   };
 
   scheduleNextRefresh();

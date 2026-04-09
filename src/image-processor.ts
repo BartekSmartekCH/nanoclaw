@@ -8,7 +8,7 @@ import {
   IMAGE_PROCESSOR_ENABLED,
   IMAGE_TEMP_DIR,
   OLLAMA_HOST,
-  OLLAMA_MODEL,
+  OLLAMA_VISION_MODEL,
 } from './config.js';
 import { logger } from './logger.js';
 
@@ -96,7 +96,7 @@ export async function checkImageTools(): Promise<{
     logger.info(
       {
         ollamaHost: OLLAMA_HOST,
-        ollamaModel: OLLAMA_MODEL,
+        ollamaModel: OLLAMA_VISION_MODEL,
         tempDir: IMAGE_TEMP_DIR,
       },
       'Image processor available',
@@ -224,7 +224,7 @@ Return ONLY valid JSON, no markdown, no explanation.`;
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
+        model: OLLAMA_VISION_MODEL,
         prompt,
         images: [base64Image],
         stream: false,
