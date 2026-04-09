@@ -40,10 +40,10 @@ function triggerIndexer(): void {
 const CLAUDE_CONFIG_DIR = '/Users/tataadmin/.claude-coder'
 const SESSION_FILE = path.join(CLAUDE_CONFIG_DIR, 'coder-session')
 const WORKING_DIR = '/Users/tataadmin/nanoclaw'
-const TIMEOUT_MS = 10 * 60 * 1000
+const TIMEOUT_MS = 60 * 60 * 1000
 let isFirstMessage = !fs.existsSync(SESSION_FILE)
 let activeProcess: ChildProcess | null = null
-let currentModel = 'sonnet'
+let currentModel = 'opus'
 
 export function getModel(): string { return currentModel }
 export function setModel(m: string): void { currentModel = m }
@@ -57,6 +57,15 @@ Allowed dirs: /Users/tataadmin/nanoclaw (read/write), /Users/tataadmin/.openclaw
 git clone: only from https://github.com/BartekSmartekCH/
 npm install: always use --ignore-scripts
 Never expose .env or Keychain contents. Keep responses concise.
+
+## Knowledge
+
+Before starting non-trivial tasks, check these files for context on past decisions and project state:
+- /Users/tataadmin/nanoclaw/groups/global/knowledge.md — merged knowledge from all groups
+- /Users/tataadmin/nanoclaw/groups/coder/knowledge.md — CoderBot session history
+
+To search conversation memory semantically:
+  python3 /Users/tataadmin/nanoclaw/container/skills/memory-search/search.py --group coder "your query" --base /Users/tataadmin/nanoclaw
 `, { mode: 0o600 })
 }
 export function isRunning(): boolean { return activeProcess !== null }
@@ -88,15 +97,20 @@ export async function runClaude(prompt: string, onChunk: (text: string) => Promi
   const timeout = setTimeout(() => { proc.kill(); log('WARN', 'Claude timed out') }, TIMEOUT_MS)
   return new Promise((resolve, reject) => {
     proc.on('close', async (code) => {
-      clearTimeout(timeout); activeProcess = null; if (isFirstMessage) { isFirstMessage = false; fs.writeFileSync(SESSION_FILE, '') }
+      clearTimeout(timeout); activeProcess = null
       while (flushing) await new Promise(r => setTimeout(r, 50))
       if (buffer) await flushBuffer(true)
       log('INFO', 'Claude exited', { code })
       if (code === 0 || code === null) {
+        if (isFirstMessage) { isFirstMessage = false; fs.writeFileSync(SESSION_FILE, '') }
         archiveSession(prompt, fullResponse.trim())
         triggerIndexer()
         resolve()
-      } else reject(new Error(`Claude exited with code ${code}`))
+      } else {
+        // On failure/timeout, reset session so next message starts fresh
+        isFirstMessage = true; try { fs.unlinkSync(SESSION_FILE) } catch {}
+        reject(new Error(`Claude exited with code ${code}`))
+      }
     })
     proc.on('error', (err) => { clearTimeout(timeout); activeProcess = null; reject(err) })
   })

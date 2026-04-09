@@ -105,7 +105,19 @@ def main():
         scored.append((score, chunk))
 
     scored.sort(key=lambda x: x[0], reverse=True)
-    top = scored[:args.top]
+
+    # Deduplicate: skip results whose full text matches an already-selected result.
+    # Compare full chunk text (not just prefix) to avoid false positives on shared preambles.
+    seen_texts: set[str] = set()
+    top: list[tuple[float, dict]] = []
+    for score, chunk in scored:
+        text = chunk.get("full_text", chunk.get("text", "")).strip()
+        if text in seen_texts:
+            continue
+        seen_texts.add(text)
+        top.append((score, chunk))
+        if len(top) >= args.top:
+            break
 
     # Output
     print(f"\n=== Memory search: \"{args.query}\" ===\n")
