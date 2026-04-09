@@ -4,6 +4,7 @@
  */
 import { execFile } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
 
@@ -124,7 +125,10 @@ function updateEnvKey(key: string, value: string): void {
     updated.push(`${key}=${value}`);
   }
 
-  fs.writeFileSync(envPath, updated.join('\n'));
+  // Atomic write: write to temp file then rename to avoid partial reads
+  const tmpPath = path.join(path.dirname(envPath), `.env.tmp.${process.pid}`);
+  fs.writeFileSync(tmpPath, updated.join('\n'));
+  fs.renameSync(tmpPath, envPath);
 }
 
 /**

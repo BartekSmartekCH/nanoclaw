@@ -68,6 +68,29 @@ echo "  Written to $GLOBAL_KNOWLEDGE" | tee -a "$LOGFILE"
 echo "" | tee -a "$LOGFILE"
 echo "[$TIMESTAMP] Done. Errors: $ERRORS" | tee -a "$LOGFILE"
 
+# Alert if any group's index is stale (>3 days old)
+STALE_DAYS=3
+ALERT_GROUPS=""
+for target in "${TARGETS[@]}"; do
+  IDX="$BASE/groups/$target/memory-index/index.json"
+  if [ -f "$IDX" ]; then
+    AGE_SECS=$(( $(date +%s) - $(stat -f %m "$IDX") ))
+    if [ "$AGE_SECS" -gt $(( STALE_DAYS * 86400 )) ]; then
+      ALERT_GROUPS="$ALERT_GROUPS $target($(( AGE_SECS / 86400 ))d)"
+    fi
+  fi
+done
+if [ -n "$ALERT_GROUPS" ]; then
+  MSG="Memory index stale:$ALERT_GROUPS -- check Ollama and reindex logs"
+  echo "ALERT: $MSG" | tee -a "$LOGFILE"
+  # Send Telegram text alert
+  TOKEN=$(grep '^TELEGRAM_BOT_TOKEN=' "$BASE/.env" | cut -d= -f2- | tr -d '[:space:]')
+  if [ -n "$TOKEN" ]; then
+    curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+      -d chat_id=8774386022 -d text="$MSG" > /dev/null 2>&1 || true
+  fi
+fi
+
 # Prune old logs (keep last 30)
 ls -t "$LOG_DIR"/reindex-*.log 2>/dev/null | tail -n +31 | xargs rm -f 2>/dev/null || true
 

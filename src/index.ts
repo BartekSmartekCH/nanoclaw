@@ -103,8 +103,8 @@ const queue = new GroupQueue();
 const voiceTriggered = new Map<string, boolean>();
 const textOnlyChats = new Set<string>();
 const chatModels = new Map<string, string>([
-  ['tg:8774386022', 'opus'],       // telegram_main
-  ['tg:-5265094203', 'opus'],      // telegram_dev
+  ['tg:8774386022', 'opus'], // telegram_main
+  ['tg:-5265094203', 'opus'], // telegram_dev
 ]);
 const DEFAULT_MODEL = 'sonnet';
 const VALID_MODELS = new Set(['sonnet', 'opus', 'haiku', 'ollama']);
@@ -838,6 +838,24 @@ async function main(): Promise<void> {
     CREDENTIAL_PROXY_PORT,
     PROXY_BIND_HOST,
   );
+
+  // Proactive OAuth token refresh every 45 minutes
+  // OAuth tokens typically expire after ~1 hour; refreshing at 45min
+  // prevents the window where containers hit 401s before reactive recovery.
+  const TOKEN_REFRESH_INTERVAL = 45 * 60 * 1000;
+  setInterval(async () => {
+    try {
+      await runClaudePing();
+      const refresh = await refreshOAuthToken();
+      if (refresh.success) {
+        logger.debug('Proactive token refresh: OK');
+      } else {
+        logger.warn({ error: refresh.error }, 'Proactive token refresh failed');
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Proactive token refresh error');
+    }
+  }, TOKEN_REFRESH_INTERVAL);
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {

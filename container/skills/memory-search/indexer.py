@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -63,6 +64,21 @@ def chunk_text(text: str) -> List[str]:
         chunks.append(text[start:end])
         start += CHUNK_CHARS - CHUNK_OVERLAP
     return [c.strip() for c in chunks if c.strip()]
+
+
+def atomic_json_write(path: Path, data: dict) -> None:
+    """Write JSON atomically: write to temp file, then rename (crash-safe)."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp, str(path))  # atomic on POSIX
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def content_hash(text: str) -> str:
@@ -392,8 +408,7 @@ def main():
     index["updated_at"] = datetime.now(timezone.utc).isoformat()
     index["group"] = args.group
 
-    with open(index_file, "w") as f:
-        json.dump(index, f)
+    atomic_json_write(index_file, index)
 
     dupe_msg = f", {skipped_dupes} duplicates skipped" if skipped_dupes else ""
     print(f"\nDone. {new_files_count} files indexed, {new_chunks} new chunks{dupe_msg}. Total: {len(chunks)} chunks.")
