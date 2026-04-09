@@ -239,41 +239,64 @@ export async function checkAuthHealth(proxyPort = 3001): Promise<{
 /**
  * Verify the current token actually works by making a lightweight API call
  * through the credential proxy. Returns true if the API accepts the token.
+ *
+ * In OAuth mode, we hit the exchange endpoint — a 403 (permission error) still
+ * proves the token is valid (Anthropic recognized it but it lacks a scope).
+ * Only a 401 means the token is truly invalid/revoked.
  */
 export async function verifyTokenViaApi(
   proxyPort = 3001,
 ): Promise<{ ok: boolean; error?: string }> {
+  const envVars = readEnvFile(['ANTHROPIC_API_KEY']);
+  const isApiKeyMode = !!envVars.ANTHROPIC_API_KEY;
+
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(
-      `http://127.0.0.1:${proxyPort}/v1/messages/count_tokens`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01',
-          // In OAuth mode the proxy requires an Authorization header to trigger
-          // token injection. Use a placeholder — the proxy replaces it.
-          Authorization: 'Bearer placeholder',
+
+    let res: Response;
+    if (isApiKeyMode) {
+      // API key mode: test with count_tokens
+      res = await fetch(
+        `http://127.0.0.1:${proxyPort}/v1/messages/count_tokens`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            messages: [{ role: 'user', content: 'test' }],
+          }),
+          signal: controller.signal,
         },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          messages: [{ role: 'user', content: 'test' }],
-        }),
-        signal: controller.signal,
-      },
-    );
-    clearTimeout(timeout);
-    if (res.status === 200) {
-      logger.debug('Token verified via API');
-      return { ok: true };
+      );
+    } else {
+      // OAuth mode: test the exchange endpoint — 403 = token valid (wrong scope), 401 = invalid
+      res = await fetch(
+        `http://127.0.0.1:${proxyPort}/api/oauth/claude_cli/create_api_key`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer placeholder',
+          },
+          body: JSON.stringify({}),
+          signal: controller.signal,
+        },
+      );
     }
+    clearTimeout(timeout);
+
     if (res.status === 401) {
       return { ok: false, error: 'Token rejected by API (401)' };
     }
-    // Other status codes (400, 429, etc.) mean the token worked but request was bad — that's OK
-    logger.debug({ status: res.status }, 'Token verification: non-401 response (token valid)');
+    // Any other status (200, 400, 403, 429) means the token was accepted
+    logger.debug(
+      { status: res.status },
+      'Token verified via API',
+    );
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
