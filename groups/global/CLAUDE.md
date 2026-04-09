@@ -89,6 +89,10 @@ After making any system-level change, append an entry to the Change Log section 
 
 CoderBot's coding sessions are archived and indexed. If you need to recall what was built, changed, or decided in a coding session, search `/workspace/project/groups/coder/memory-index/index.json` using the memory-search skill.
 
+## Session Startup
+
+On every session start, read the last 3 entries from `/workspace/group/knowledge.md` for recent context about this group (decisions, builds, fixes, open items). If `/workspace/global/knowledge.md` exists, also read its last 3 entries for the shared knowledge baseline across all groups.
+
 ## Memory
 
 The `conversations/` folder contains searchable history of past conversations. Use this to recall context from previous sessions.

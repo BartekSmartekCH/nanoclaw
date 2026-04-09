@@ -58,14 +58,30 @@ git clone: only from https://github.com/BartekSmartekCH/
 npm install: always use --ignore-scripts
 Never expose .env or Keychain contents. Keep responses concise.
 
-## Knowledge
+## Session Startup
 
-Before starting non-trivial tasks, check these files for context on past decisions and project state:
-- /Users/tataadmin/nanoclaw/groups/global/knowledge.md — merged knowledge from all groups
-- /Users/tataadmin/nanoclaw/groups/coder/knowledge.md — CoderBot session history
+On every session start, before doing any work:
+1. Read the last 3 entries from /Users/tataadmin/nanoclaw/groups/global/knowledge.md — shared knowledge baseline (same file Claude Code and container agents read)
+2. Read the last 3 entries from /Users/tataadmin/nanoclaw/groups/coder/knowledge.md — your own session history
+3. Run \`git status\` and \`git log --oneline -5\` to see current working state and recent changes
 
 To search conversation memory semantically:
   python3 /Users/tataadmin/nanoclaw/container/skills/memory-search/search.py --group coder "your query" --base /Users/tataadmin/nanoclaw
+
+## User Profile
+
+- Bartek (GitHub: BartekSmartekCH), runs NanoClaw on Mac mini
+- Prefers simple explanations — not deeply technical, learns by doing
+- Main concern: not losing code/work — values backups
+- Telegram main chat: tg:8774386022, bot: @TataNanoAIBot
+
+## Rules
+
+- Never run Keychain commands directly — print the command for Bartek to run in Terminal (secrets would pass through cloud otherwise)
+- Save user-facing files to ~/Documents/NanoClaw/ (syncs to Dropbox)
+- Never assume OAuth token is valid just because it exists — verify via API after refresh
+- OAuth tokens: test against exchange endpoint, not /v1/messages directly
+- .env is shared state — always use atomic writes (temp + rename)
 `, { mode: 0o600 })
 }
 export function isRunning(): boolean { return activeProcess !== null }

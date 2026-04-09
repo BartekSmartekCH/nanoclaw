@@ -245,6 +245,33 @@ async function runTask(
     error,
   });
 
+  recordTaskOutcome(task.id, !!error);
+
+  // Auto-pause after too many consecutive failures to stop infinite error loops.
+  if (error && shouldAutoPause(task.id)) {
+    updateTask(task.id, { status: 'paused' });
+    consecutiveFailures.delete(task.id);
+    logger.warn(
+      { taskId: task.id, threshold: MAX_CONSECUTIVE_FAILURES },
+      'Task auto-paused after consecutive failures',
+    );
+    // Always alert the main group, not the task's own chat
+    const mainJid = Object.entries(deps.registeredGroups()).find(
+      ([, g]) => g.isMain,
+    )?.[0];
+    if (mainJid) {
+      try {
+        await deps.sendMessage(
+          mainJid,
+          `⚠️ Scheduled task *${task.id}* paused after ${MAX_CONSECUTIVE_FAILURES} consecutive failures. Last error: ${error.slice(0, 200)}`,
+        );
+      } catch {
+        // Best-effort alert
+      }
+    }
+    return;
+  }
+
   // Auth error recovery: if the task failed with a 401 and we haven't retried yet,
   // refresh the token and retry the task once.
   if (error && isAuthError(error) && !_retryAfterRefresh && deps.onAuthError) {
@@ -266,6 +293,50 @@ async function runTask(
       ? result.slice(0, 200)
       : 'Completed';
   updateTaskAfterRun(task.id, nextRun, resultSummary);
+}
+
+// --- Consecutive failure tracking & auto-pause ---
+
+const MAX_CONSECUTIVE_FAILURES = 5;
+const consecutiveFailures = new Map<string, number>();
+
+function recordTaskOutcome(taskId: string, failed: boolean): void {
+  if (failed) {
+    const count = (consecutiveFailures.get(taskId) ?? 0) + 1;
+    consecutiveFailures.set(taskId, count);
+  } else {
+    consecutiveFailures.delete(taskId);
+  }
+}
+
+function shouldAutoPause(taskId: string): boolean {
+  return (consecutiveFailures.get(taskId) ?? 0) >= MAX_CONSECUTIVE_FAILURES;
+}
+
+/**
+ * On startup, re-activate paused memory-reindex tasks so the pipeline
+ * self-heals after a deploy/restart fixes the underlying issue.
+ */
+export function recoverPausedReindexTasks(): void {
+  const all = getAllTasks();
+  for (const task of all) {
+    // Cast: DB may contain legacy statuses like 'disabled' not in the TS union
+    const status = task.status as string;
+    if (
+      task.id.startsWith('memory-reindex-') &&
+      (status === 'paused' || status === 'disabled')
+    ) {
+      updateTask(task.id, {
+        status: 'active',
+        next_run: new Date(Date.now() + 60_000).toISOString(),
+      });
+      consecutiveFailures.delete(task.id);
+      logger.info(
+        { taskId: task.id, previousStatus: task.status },
+        'Re-activated paused reindex task on startup',
+      );
+    }
+  }
 }
 
 let schedulerRunning = false;

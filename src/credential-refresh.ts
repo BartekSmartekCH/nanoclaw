@@ -293,10 +293,7 @@ export async function verifyTokenViaApi(
       return { ok: false, error: 'Token rejected by API (401)' };
     }
     // Any other status (200, 400, 403, 429) means the token was accepted
-    logger.debug(
-      { status: res.status },
-      'Token verified via API',
-    );
+    logger.debug({ status: res.status }, 'Token verified via API');
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

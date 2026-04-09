@@ -465,13 +465,12 @@ export class TelegramChannel implements Channel {
         const time = now.toISOString().slice(11, 16).replace(':', '');
         const filename = `notebook-${date}-${time}.md`;
         const sender = ctx.from?.first_name || 'Unknown';
-        const content =
-          `<!-- saved: ${now.toISOString()} by: ${sender} -->\n\n${text}\n`;
+        const content = `<!-- saved: ${now.toISOString()} by: ${sender} -->\n\n${text}\n`;
         fs.writeFileSync(path.join(SOURCES_DIR, filename), content, 'utf-8');
 
-        const count = fs.readdirSync(SOURCES_DIR).filter((f) =>
-          f.endsWith('.md'),
-        ).length;
+        const count = fs
+          .readdirSync(SOURCES_DIR)
+          .filter((f) => f.endsWith('.md')).length;
         ctx.reply(`📓 Saved to notebook (${count} entries total)`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

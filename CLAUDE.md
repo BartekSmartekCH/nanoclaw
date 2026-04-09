@@ -2,6 +2,10 @@
 
 Personal Claude assistant. See [README.md](README.md) for philosophy and setup. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for architecture decisions.
 
+## Session Startup
+
+On first interaction of a new session, read the last 3 entries from `groups/global/knowledge.md` to catch up on recent decisions, builds, fixes, and open items across all groups. This is the same shared knowledge baseline that CoderBot and container agents read — keeps all agents aligned.
+
 ## Quick Context
 
 Single Node.js process with skill-based channel system. Channels (WhatsApp, Telegram, Slack, Discord, Gmail) are skills that self-register at startup. Messages route to Claude Agent SDK running in containers (Linux VMs). Each group has isolated filesystem and memory.

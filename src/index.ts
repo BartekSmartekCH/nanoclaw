@@ -73,7 +73,10 @@ import {
   isSessionCommandAllowed,
 } from './session-commands.js';
 import { startSessionCleanup } from './session-cleanup.js';
-import { startSchedulerLoop } from './task-scheduler.js';
+import {
+  recoverPausedReindexTasks,
+  startSchedulerLoop,
+} from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import {
   checkVoiceTools,
@@ -1087,6 +1090,9 @@ async function main(): Promise<void> {
   if (TELEGRAM_BOT_POOL.length > 0) {
     await initBotPool(TELEGRAM_BOT_POOL);
   }
+
+  // Re-activate any reindex tasks that were paused/disabled due to prior failures
+  recoverPausedReindexTasks();
 
   // Start subsystems (independently of connection handler)
   startSchedulerLoop({

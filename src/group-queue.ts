@@ -352,7 +352,10 @@ export class GroupQueue {
     const state = this.groups.get(groupJid);
     if (!state?.active || !state.process || state.process.killed) return false;
     state.process.kill('SIGTERM');
-    logger.info({ groupJid, containerName: state.containerName }, 'Aborted group container');
+    logger.info(
+      { groupJid, containerName: state.containerName },
+      'Aborted group container',
+    );
     return true;
   }
 
