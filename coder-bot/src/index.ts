@@ -27,6 +27,7 @@ function findTool(name: string): string | null {
 }
 const FFMPEG = findTool('ffmpeg')
 const WHISPER = findTool('whisper')
+let voiceEnabled = true
 
 const POLL_TIMEOUT = 30
 interface Update {
@@ -89,7 +90,29 @@ async function handleMessage(chatId: number, userId: number, text: string): Prom
     return
   }
   if (input === '/start' || input === '/help') {
-    await send(chatId, '🤖 CoderBot — direct Claude Code access\n\n/clear — new session\n/abort — cancel\n/status — state\n/model — switch AI model')
+    await send(chatId, '🤖 CoderBot — direct Claude Code access\n\n/clear — new session\n/abort — cancel\n/status — state\n/model — switch AI model\n/ping — check if online\n/chatid ��� show chat ID\n/health — check Claude CLI\n/fix_auth — re-check credentials\n/text — toggle voice transcription')
+    return
+  }
+  if (input === '/ping') { await send(chatId, '🤖 CoderBot is online.'); return }
+  if (input === '/chatid') { await send(chatId, `Chat ID: ${chatId}\nType: private`); return }
+  if (input === '/health') {
+    try {
+      await execFileAsync('claude', ['--version'], { timeout: 5000, env: { ...process.env, PATH: `${TOOL_PATH}:${process.env.PATH || ''}` } })
+      await send(chatId, '✅ Claude CLI is available.')
+    } catch (err) { await send(chatId, `❌ Claude CLI check failed: ${err instanceof Error ? err.message : String(err)}`) }
+    return
+  }
+  if (input === '/fix_auth') {
+    try {
+      await readKeychain('NanoClaw-coder-credentials', 'bartek')
+      await send(chatId, '✅ Credentials OK.')
+    } catch (err) { await send(chatId, `❌ Credential check failed: ${err instanceof Error ? err.message : String(err)}`) }
+    return
+  }
+  if (input === '/text') {
+    if (!FFMPEG || !WHISPER) { await send(chatId, '⚠️ Voice tools not available.'); return }
+    voiceEnabled = !voiceEnabled
+    await send(chatId, voiceEnabled ? '���� Voice transcription on' : '💬 Voice transcription off')
     return
   }
   if (input === '/model' || input.startsWith('/model ')) {
@@ -154,6 +177,7 @@ async function poll(): Promise<void> {
         else if (m?.voice && m.from) {
           log('INFO', 'Voice message', { fileId: m.voice.file_id, duration: m.voice.duration })
           if (m.from.id !== BARTEK_USER_ID) { log('WARN', 'Unauthorized voice', { userId: m.from.id }); continue }
+          if (!voiceEnabled) { await send(m.chat.id, '💬 Voice transcription is off. Use /text to re-enable.'); continue }
           const text = await transcribeVoice(m.voice.file_id)
           if (text) { log('INFO', 'Transcribed', { length: text.length }); await handleMessage(m.chat.id, m.from.id, text) }
           else await send(m.chat.id, '⚠️ Could not transcribe voice message.')
@@ -169,6 +193,19 @@ async function main(): Promise<void> {
   baseUrl = `https://api.telegram.org/bot${botToken}`
   await readKeychain('NanoClaw-coder-credentials', 'bartek')
   log('INFO', 'Tokens loaded')
+  await tg('setMyCommands', { commands: [
+    { command: 'help', description: 'List available commands' },
+    { command: 'ping', description: 'Check if bot is online' },
+    { command: 'chatid', description: 'Show chat ID' },
+    { command: 'status', description: 'Current state' },
+    { command: 'health', description: 'Check Claude CLI' },
+    { command: 'fix_auth', description: 'Re-check credentials' },
+    { command: 'model', description: 'Switch AI model (sonnet/opus/haiku/ollama)' },
+    { command: 'text', description: 'Toggle voice transcription' },
+    { command: 'abort', description: 'Cancel running task' },
+    { command: 'clear', description: 'New session' },
+  ]})
+  log('INFO', 'Bot commands registered')
   process.on('SIGTERM', () => { log('INFO', 'Shutdown'); abortCurrent(); process.exit(0) })
   await poll()
 }

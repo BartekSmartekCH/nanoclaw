@@ -102,7 +102,10 @@ const channels: Channel[] = [];
 const queue = new GroupQueue();
 const voiceTriggered = new Map<string, boolean>();
 const textOnlyChats = new Set<string>();
-const chatModels = new Map<string, string>();
+const chatModels = new Map<string, string>([
+  ['tg:8774386022', 'opus'],       // telegram_main
+  ['tg:-5265094203', 'opus'],      // telegram_dev
+]);
 const DEFAULT_MODEL = 'sonnet';
 const VALID_MODELS = new Set(['sonnet', 'opus', 'haiku', 'ollama']);
 
@@ -914,6 +917,8 @@ async function main(): Promise<void> {
       chatModels.set(chatJid, model);
       return model;
     },
+    abortGroup: (chatJid: string): boolean => queue.abortGroup(chatJid),
+    clearGroup: (chatJid: string): boolean => queue.clearGroup(chatJid),
     onMessage: (chatJid: string, msg: NewMessage) => {
       // Remote control commands — intercept before storage
       const trimmed = msg.content.trim();

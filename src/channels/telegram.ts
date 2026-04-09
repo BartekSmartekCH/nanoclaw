@@ -41,6 +41,8 @@ export interface TelegramChannelOpts {
   getSystemStatus?: () => SystemStatus;
   toggleTextOnly?: (chatJid: string) => boolean;
   switchModel?: (chatJid: string, model: string | null) => string;
+  abortGroup?: (chatJid: string) => boolean;
+  clearGroup?: (chatJid: string) => boolean;
 }
 
 /**
@@ -263,6 +265,12 @@ export class TelegramChannel implements Channel {
         '/help — List available commands',
       ];
 
+      lines.push(
+        '/model — Switch AI model',
+        '/abort — Cancel running agent',
+        '/clear — Clear session and pending tasks',
+      );
+
       if (group.isMain) {
         lines.push(
           '/status — System health and queue status',
@@ -351,6 +359,26 @@ export class TelegramChannel implements Channel {
       }
     });
 
+    // /abort — kill running container for this group
+    this.bot.command('abort', (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      if (this.opts.abortGroup?.(chatJid)) {
+        ctx.reply('🛑 Aborted.');
+      } else {
+        ctx.reply('Nothing running.');
+      }
+    });
+
+    // /clear — clear pending messages/tasks and kill running container
+    this.bot.command('clear', (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      if (this.opts.clearGroup?.(chatJid)) {
+        ctx.reply('✅ Session cleared.');
+      } else {
+        ctx.reply('Nothing to clear.');
+      }
+    });
+
     // Telegram bot commands handled above — skip them in the general handler
     // so they don't also get stored as messages. All other /commands flow through.
     const TELEGRAM_BOT_COMMANDS = new Set([
@@ -362,6 +390,8 @@ export class TelegramChannel implements Channel {
       'status',
       'text',
       'model',
+      'abort',
+      'clear',
     ]);
 
     this.bot.on('message:text', async (ctx) => {
@@ -824,10 +854,9 @@ export class TelegramChannel implements Channel {
       { command: 'status', description: 'System health check' },
       { command: 'dev', description: 'Assemble dev team for a task' },
       { command: 'text', description: 'Toggle text-only / voice mirror mode' },
-      {
-        command: 'model',
-        description: 'Switch AI model (sonnet/opus/haiku/ollama)',
-      },
+      { command: 'model', description: 'Switch AI model (sonnet/opus/haiku/ollama)' },
+      { command: 'abort', description: 'Cancel running agent' },
+      { command: 'clear', description: 'Clear session and pending tasks' },
     ];
     this.bot.api
       .setMyCommands(defaultCommands)

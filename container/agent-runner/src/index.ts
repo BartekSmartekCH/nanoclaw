@@ -39,17 +39,6 @@ interface ContainerOutput {
   error?: string;
 }
 
-interface SessionEntry {
-  sessionId: string;
-  fullPath: string;
-  summary: string;
-  firstPrompt: string;
-}
-
-interface SessionsIndex {
-  entries: SessionEntry[];
-}
-
 interface SDKUserMessage {
   type: 'user';
   message: { role: 'user'; content: string };
@@ -120,36 +109,16 @@ function log(message: string): void {
   console.error(`[agent-runner] ${message}`);
 }
 
-function getSessionSummary(sessionId: string, transcriptPath: string): string | null {
-  const projectDir = path.dirname(transcriptPath);
-  const indexPath = path.join(projectDir, 'sessions-index.json');
-
-  if (!fs.existsSync(indexPath)) {
-    log(`Sessions index not found at ${indexPath}`);
-    return null;
-  }
-
-  try {
-    const index: SessionsIndex = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
-    const entry = index.entries.find(e => e.sessionId === sessionId);
-    if (entry?.summary) {
-      return entry.summary;
-    }
-  } catch (err) {
-    log(`Failed to read sessions index: ${err instanceof Error ? err.message : String(err)}`);
-  }
-
-  return null;
-}
-
 /**
- * Archive the full transcript to conversations/ before compaction.
+ * Archive new messages from the transcript to conversations/ before compaction.
+ * Only writes messages added since the last archive (delta), not the full history.
  */
 function createPreCompactHook(assistantName?: string): HookCallback {
+  let lastArchivedCount = 0;
+
   return async (input, _toolUseId, _context) => {
     const preCompact = input as PreCompactHookInput;
     const transcriptPath = preCompact.transcript_path;
-    const sessionId = preCompact.session_id;
 
     if (!transcriptPath || !fs.existsSync(transcriptPath)) {
       log('No transcript found for archiving');
@@ -158,46 +127,39 @@ function createPreCompactHook(assistantName?: string): HookCallback {
 
     try {
       const content = fs.readFileSync(transcriptPath, 'utf-8');
-      const messages = parseTranscript(content);
+      const allMessages = parseTranscript(content);
 
-      if (messages.length === 0) {
-        log('No messages to archive');
+      // Only archive messages added since the last archive
+      const newMessages = allMessages.slice(lastArchivedCount);
+
+      if (newMessages.length === 0) {
+        log('No new messages to archive');
         return {};
       }
-
-      const summary = getSessionSummary(sessionId, transcriptPath);
-      const name = summary ? sanitizeFilename(summary) : generateFallbackName();
 
       const conversationsDir = '/workspace/group/conversations';
       fs.mkdirSync(conversationsDir, { recursive: true });
 
       const date = new Date().toISOString().split('T')[0];
-      const filename = `${date}-${name}.md`;
-      const filePath = path.join(conversationsDir, filename);
+      const filePath = path.join(conversationsDir, `${date}.md`);
 
-      const markdown = formatTranscriptMarkdown(messages, summary, assistantName);
-      fs.writeFileSync(filePath, markdown);
+      const markdown = formatTranscriptMarkdown(newMessages, null, assistantName);
 
-      log(`Archived conversation to ${filePath}`);
+      // Append to daily file (multiple compacts per day produce separate entries)
+      if (fs.existsSync(filePath)) {
+        fs.appendFileSync(filePath, '\n---\n\n' + markdown);
+      } else {
+        fs.writeFileSync(filePath, markdown);
+      }
+
+      lastArchivedCount = allMessages.length;
+      log(`Archived ${newMessages.length} new messages to ${filePath} (total: ${allMessages.length})`);
     } catch (err) {
       log(`Failed to archive transcript: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     return {};
   };
-}
-
-function sanitizeFilename(summary: string): string {
-  return summary
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 50);
-}
-
-function generateFallbackName(): string {
-  const time = new Date();
-  return `conversation-${time.getHours().toString().padStart(2, '0')}${time.getMinutes().toString().padStart(2, '0')}`;
 }
 
 interface ParsedMessage {
@@ -395,7 +357,7 @@ async function runQuery(
   for await (const message of query({
     prompt: stream,
     options: {
-      model: containerInput.model,
+      model: containerInput.model || 'sonnet[1m]',
       cwd: '/workspace/group',
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
       resume: sessionId,
@@ -403,7 +365,6 @@ async function runQuery(
       systemPrompt: globalClaudeMd
         ? { type: 'preset' as const, preset: 'claude_code' as const, append: globalClaudeMd }
         : undefined,
-      model: 'sonnet[1m]',
       allowedTools: [
         'Bash',
         'Read', 'Write', 'Edit', 'Glob', 'Grep',

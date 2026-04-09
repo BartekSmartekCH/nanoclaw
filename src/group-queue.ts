@@ -344,6 +344,34 @@ export class GroupQueue {
     }
   }
 
+  /**
+   * Abort the running container for a group by killing the process.
+   * Returns true if a process was killed, false if nothing was running.
+   */
+  abortGroup(groupJid: string): boolean {
+    const state = this.groups.get(groupJid);
+    if (!state?.active || !state.process || state.process.killed) return false;
+    state.process.kill('SIGTERM');
+    logger.info({ groupJid, containerName: state.containerName }, 'Aborted group container');
+    return true;
+  }
+
+  /**
+   * Clear pending messages and tasks for a group.
+   * If a container is running, also abort it so the next message starts fresh.
+   */
+  clearGroup(groupJid: string): boolean {
+    const state = this.groups.get(groupJid);
+    if (!state) return false;
+    state.pendingMessages = false;
+    state.pendingTasks = [];
+    if (state.active && state.process && !state.process.killed) {
+      state.process.kill('SIGTERM');
+    }
+    logger.info({ groupJid }, 'Cleared group state');
+    return true;
+  }
+
   getStatus(): {
     activeCount: number;
     waitingCount: number;

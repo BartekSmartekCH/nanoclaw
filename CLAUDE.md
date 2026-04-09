@@ -10,20 +10,90 @@ Single Node.js process with skill-based channel system. Channels (WhatsApp, Tele
 
 | File | Purpose |
 |------|---------|
-| `src/index.ts` | Orchestrator: state, message loop, agent invocation |
+| `src/index.ts` | Orchestrator: message loop (2s poll), trigger matching, container invocation, idle timeout |
+| `src/group-queue.ts` | Concurrency control: max 5 containers, task priority over messages, exponential backoff |
 | `src/channels/registry.ts` | Channel registry (self-registration at startup) |
-| `src/ipc.ts` | IPC watcher and task processing |
+| `src/channels/telegram.ts` | Telegram channel: bot pool, voice handling, image forwarding |
+| `src/ipc.ts` | IPC watcher: file-based input/output between host and containers |
 | `src/router.ts` | Message formatting and outbound routing |
-| `src/config.ts` | Trigger pattern, paths, intervals |
-| `src/container-runner.ts` | Spawns agent containers with mounts |
-| `src/task-scheduler.ts` | Runs scheduled tasks |
-| `src/db.ts` | SQLite operations |
-| `groups/{name}/CLAUDE.md` | Per-group memory (isolated) |
-| `container/skills/` | Skills loaded inside agent containers (browser, status, formatting) |
+| `src/voice.ts` | Voice pipeline: Whisper STT + edge-tts TTS + ffmpeg conversion |
+| `src/config.ts` | All paths, intervals, container limits, assistant name |
+| `src/container-runner.ts` | Spawns agent containers with 10+ volume mounts, credential proxy |
+| `src/task-scheduler.ts` | Runs scheduled tasks (cron-based) |
+| `src/db.ts` | SQLite: 7 tables (messages, chats, sessions, registered_groups, scheduled_tasks, task_run_logs, router_state) |
+| `groups/{name}/CLAUDE.md` | Per-group personality and instructions (isolated) |
+| `groups/{name}/voice.json` | Per-group TTS voice config |
+| `groups/{name}/conversations/` | Conversation archives (markdown) |
+| `groups/{name}/memory-index/` | Vector index + knowledge.md for semantic search |
+| `groups/global/CLAUDE.md` | Shared instructions for all non-main groups |
+| `container/skills/` | Skills loaded inside agent containers at runtime |
 
-## Secrets / Credentials / Proxy (OneCLI)
+## Active Groups
 
-API keys, secret keys, OAuth tokens, and auth credentials are managed by the OneCLI gateway — which handles secret injection into containers at request time, so no keys or tokens are ever passed to containers directly. Run `onecli --help`.
+| Group Folder | Channel | Purpose |
+|-------------|---------|---------|
+| `telegram_main` | Telegram | Primary chat group |
+| `telegram_dev` | Telegram | Development/testing |
+| `telegram_deutschflow` | Telegram | German language practice |
+| `telegram_linguaflow` | Telegram | Spanish language practice |
+| `coder` | Internal | CoderBot sessions |
+| `global` | Shared | Global instructions for non-main groups |
+| `main` | WhatsApp | Original channel (legacy) |
+
+## Standalone Bots
+
+Separate Node.js processes outside the main NanoClaw router. Each has its own launchd service.
+
+| Bot | Path | Purpose |
+|-----|------|---------|
+| `bart-bot/` | Telegram bot | Bart Simpson persona with Fish Audio TTS |
+| `mama-bot/` | Telegram bot | MamaZdrowie health assistant (Polish, CGM educator) |
+| `coder-bot/` | Internal | CoderBot coding assistant |
+| `crawler-bot/` | Telegram bot | Web crawling agent |
+
+## Memory System
+
+Three-phase memory pipeline runs per group (weekly cron + on container idle):
+
+1. **Vector indexing** — chunks conversation archives, embeds via Ollama (`nomic-embed-text`), stores in `memory-index/index.json`
+2. **Synthesis** — Ollama (`qwen2.5vl:7b`) extracts structured facts (decisions, built, fixed, discussed, open, preferences) into `knowledge.md`
+3. **Knowledge indexing** — re-embeds `knowledge.md` with `source: "knowledge"` for higher-rank search results
+
+Files: `container/skills/memory-search/indexer.py` (build), `container/skills/memory-search/search.py` (query)
+
+## Container Architecture
+
+Containers get these volume mounts:
+- **Project root** (read-only) at `/workspace/project` (`.env` shadowed with `/dev/null`)
+- **Group folder** (writable) at `/workspace/group`
+- **Global memory** (read-only, non-main only) at `/workspace/global`
+- **IPC directory** (writable) at `/workspace/ipc`
+- **Container skills** synced to `/home/node/.claude/`
+
+Credentials injected via credential proxy on `localhost:3001` — no API keys in containers.
+
+## Voice / TTS Pipeline
+
+| Stage | Tool | Details |
+|-------|------|---------|
+| STT | Whisper (`/opt/homebrew/bin/whisper`) | OGG → WAV (16kHz mono) → transcription with language hint |
+| TTS | edge-tts (`/opt/homebrew/bin/edge-tts`) | Text → MP3 → OGG/opus @ 64k (Telegram-compatible) |
+| Convert | ffmpeg (`/opt/homebrew/bin/ffmpeg`) | Format conversion for both pipelines |
+
+Mirror mode: if user sends voice, reply is also voice (when TTS enabled and text < `max_tts_chars`).
+
+## Secrets / Credentials
+
+Credentials are managed via macOS Keychain + a native credential proxy (`src/credential-proxy.ts` on port 3001).
+
+| Component | Source |
+|-----------|--------|
+| Container agents | `.env` → credential proxy injects headers per-request; `.env` shadowed with `/dev/null` inside containers |
+| Standalone bots (mama-bot, bart-bot) | macOS Keychain (`security find-generic-password`) |
+| Coder-bot | Claude CLI's own auth (Keychain/OAuth) |
+| VirusTotal | Keychain → mounted as secret file in IPC dir |
+
+OAuth token refresh: `src/credential-refresh.ts` reads fresh token from Keychain, updates `.env` if changed. Containers never see raw credentials.
 
 ## Skills
 
@@ -50,11 +120,14 @@ Before creating a PR, adding a skill, or preparing any contribution, you MUST re
 
 ## Development
 
-Run commands directly—don't tell the user to run them.
+Run commands directly — don't tell the user to run them.
 
 ```bash
 npm run dev          # Run with hot reload
 npm run build        # Compile TypeScript
+npm run test         # Run vitest
+npm run lint         # ESLint
+npm run format       # Prettier
 ./container/build.sh # Rebuild agent container
 ```
 
@@ -70,6 +143,19 @@ systemctl --user start nanoclaw
 systemctl --user stop nanoclaw
 systemctl --user restart nanoclaw
 ```
+
+## Key Config Values
+
+| Config | Default | Source |
+|--------|---------|--------|
+| `POLL_INTERVAL` | 2000ms | `src/config.ts` |
+| `IDLE_TIMEOUT` | 30 min | `src/config.ts` |
+| `CONTAINER_TIMEOUT` | 30 min | `src/config.ts` |
+| `MAX_CONCURRENT_CONTAINERS` | 5 | `src/config.ts` |
+| `CREDENTIAL_PROXY_PORT` | 3001 | `src/config.ts` |
+| `MAX_MESSAGES_PER_PROMPT` | 10 | `src/config.ts` |
+| `ASSISTANT_NAME` | "TataNano" | `src/config.ts` |
+| `CONTAINER_IMAGE` | "nanoclaw-agent:latest" | `src/config.ts` |
 
 ## Troubleshooting
 
