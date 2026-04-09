@@ -85,7 +85,12 @@ import {
   synthesize,
 } from './voice.js';
 import { checkImageTools, cleanupImageTemp } from './image-processor.js';
-import { refreshOAuthToken, runClaudePing } from './credential-refresh.js';
+import {
+  refreshOAuthToken,
+  runClaudePing,
+  getTokenExpiry,
+  verifyTokenViaApi,
+} from './credential-refresh.js';
 import { logger } from './logger.js';
 
 // Re-export for backwards compatibility during refactor
@@ -839,23 +844,89 @@ async function main(): Promise<void> {
     PROXY_BIND_HOST,
   );
 
-  // Proactive OAuth token refresh every 45 minutes
-  // OAuth tokens typically expire after ~1 hour; refreshing at 45min
-  // prevents the window where containers hit 401s before reactive recovery.
-  const TOKEN_REFRESH_INTERVAL = 45 * 60 * 1000;
-  setInterval(async () => {
+  // Expiry-aware OAuth token refresh.
+  // Reads the actual token expiry from Keychain and refreshes 5 minutes before.
+  // Falls back to 45-minute fixed interval if expiry is unavailable.
+  const FALLBACK_REFRESH_INTERVAL = 45 * 60 * 1000;
+  const REFRESH_MARGIN = 5 * 60 * 1000; // refresh 5 minutes before expiry
+  let consecutiveRefreshFailures = 0;
+  let refreshAlertSent = false;
+
+  const scheduleNextRefresh = async () => {
+    let delayMs = FALLBACK_REFRESH_INTERVAL;
     try {
-      await runClaudePing();
-      const refresh = await refreshOAuthToken();
-      if (refresh.success) {
-        logger.debug('Proactive token refresh: OK');
-      } else {
-        logger.warn({ error: refresh.error }, 'Proactive token refresh failed');
+      const expiresAt = await getTokenExpiry();
+      if (expiresAt) {
+        const timeToExpiry = expiresAt - Date.now();
+        if (timeToExpiry <= REFRESH_MARGIN) {
+          delayMs = 0; // expired or about to — refresh now
+        } else {
+          delayMs = timeToExpiry - REFRESH_MARGIN;
+          logger.debug(
+            {
+              expiresInMin: Math.round(timeToExpiry / 60000),
+              nextRefreshInMin: Math.round(delayMs / 60000),
+            },
+            'Token expiry-aware refresh scheduled',
+          );
+        }
       }
-    } catch (err) {
-      logger.warn({ err }, 'Proactive token refresh error');
+    } catch {
+      // Keychain read failed — use fallback
     }
-  }, TOKEN_REFRESH_INTERVAL);
+
+    setTimeout(async () => {
+      try {
+        await runClaudePing();
+        const refresh = await refreshOAuthToken();
+        if (refresh.success) {
+          // Verify the token actually works
+          const verify = await verifyTokenViaApi(CREDENTIAL_PROXY_PORT);
+          if (verify.ok) {
+            logger.debug('Proactive token refresh: OK (verified)');
+          } else {
+            logger.warn(
+              { error: verify.error },
+              'Token refreshed but API verification failed',
+            );
+          }
+          consecutiveRefreshFailures = 0;
+          refreshAlertSent = false;
+        } else {
+          consecutiveRefreshFailures++;
+          logger.warn(
+            { error: refresh.error, consecutiveFailures: consecutiveRefreshFailures },
+            'Proactive token refresh failed',
+          );
+        }
+      } catch (err) {
+        consecutiveRefreshFailures++;
+        logger.warn({ err, consecutiveFailures: consecutiveRefreshFailures }, 'Proactive token refresh error');
+      }
+
+      // Alert after 3 consecutive failures (~2+ hours)
+      if (consecutiveRefreshFailures >= 3 && !refreshAlertSent) {
+        refreshAlertSent = true;
+        const mainJid = Object.entries(registeredGroups).find(
+          ([, g]) => g.isMain,
+        )?.[0];
+        if (mainJid) {
+          const ch = findChannel(channels, mainJid);
+          if (ch) {
+            ch.sendMessage(
+              mainJid,
+              `⚠️ Auth refresh failing repeatedly (${consecutiveRefreshFailures} attempts). Run \`claude\` on the Mac mini to re-authenticate.`,
+            ).catch(() => {});
+          }
+        }
+      }
+
+      // Schedule the next refresh
+      scheduleNextRefresh();
+    }, Math.max(delayMs, 10000)); // minimum 10s between refreshes
+  };
+
+  scheduleNextRefresh();
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
@@ -1023,6 +1094,11 @@ async function main(): Promise<void> {
       }
       const text = formatOutbound(rawText);
       if (text) await channel.sendMessage(jid, text);
+    },
+    onAuthError: async () => {
+      await runClaudePing();
+      const refresh = await refreshOAuthToken();
+      return refresh.success;
     },
   });
   startIpcWatcher({

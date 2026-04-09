@@ -73,11 +73,25 @@ export interface SchedulerDependencies {
     groupFolder: string,
   ) => void;
   sendMessage: (jid: string, text: string) => Promise<void>;
+  /** Called when a task fails with an auth error. Returns true if token was refreshed. */
+  onAuthError?: () => Promise<boolean>;
+}
+
+const AUTH_ERROR_PATTERNS = [
+  /401.*(?:authentication|unauthorized)/i,
+  /authentication_error/i,
+  /invalid authentication credentials/i,
+  /failed to authenticate/i,
+];
+
+function isAuthError(text: string): boolean {
+  return AUTH_ERROR_PATTERNS.some((p) => p.test(text));
 }
 
 async function runTask(
   task: ScheduledTask,
   deps: SchedulerDependencies,
+  _retryAfterRefresh = false,
 ): Promise<void> {
   const startTime = Date.now();
   let groupDir: string;
@@ -230,6 +244,20 @@ async function runTask(
     result,
     error,
   });
+
+  // Auth error recovery: if the task failed with a 401 and we haven't retried yet,
+  // refresh the token and retry the task once.
+  if (error && isAuthError(error) && !_retryAfterRefresh && deps.onAuthError) {
+    logger.warn(
+      { taskId: task.id },
+      'Task failed with auth error, attempting token refresh and retry',
+    );
+    const refreshed = await deps.onAuthError();
+    if (refreshed) {
+      logger.info({ taskId: task.id }, 'Token refreshed, retrying task');
+      return runTask(task, deps, true);
+    }
+  }
 
   const nextRun = computeNextRun(task);
   const resultSummary = error

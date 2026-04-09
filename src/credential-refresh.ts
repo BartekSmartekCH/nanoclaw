@@ -53,8 +53,13 @@ export async function runClaudePing(): Promise<{
  * Read the current OAuth token from macOS Keychain.
  * Returns null on non-macOS or if the credential isn't found.
  */
-async function readKeychainToken(): Promise<string | null> {
-  if (process.platform !== 'darwin') return null;
+interface KeychainResult {
+  token: string | null;
+  expiresAt: number;
+}
+
+async function readKeychainTokenWithExpiry(): Promise<KeychainResult> {
+  if (process.platform !== 'darwin') return { token: null, expiresAt: 0 };
 
   // Check both service names (mirrors getFreshKeychainToken in credential-proxy)
   const services = [
@@ -93,7 +98,20 @@ async function readKeychainToken(): Promise<string | null> {
   if (!bestToken) {
     logger.warn('No valid (non-expired) OAuth token found in Keychain');
   }
-  return bestToken;
+  return { token: bestToken, expiresAt: bestExpiry };
+}
+
+async function readKeychainToken(): Promise<string | null> {
+  return (await readKeychainTokenWithExpiry()).token;
+}
+
+/**
+ * Get the current token's expiry timestamp (ms since epoch).
+ * Returns null if no token or not on macOS.
+ */
+export async function getTokenExpiry(): Promise<number | null> {
+  const { expiresAt } = await readKeychainTokenWithExpiry();
+  return expiresAt > 0 ? expiresAt : null;
 }
 
 /**
@@ -215,5 +233,50 @@ export async function checkAuthHealth(proxyPort = 3001): Promise<{
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, error: `Health check failed: ${msg}` };
+  }
+}
+
+/**
+ * Verify the current token actually works by making a lightweight API call
+ * through the credential proxy. Returns true if the API accepts the token.
+ */
+export async function verifyTokenViaApi(
+  proxyPort = 3001,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(
+      `http://127.0.0.1:${proxyPort}/v1/messages/count_tokens`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01',
+          // In OAuth mode the proxy requires an Authorization header to trigger
+          // token injection. Use a placeholder — the proxy replaces it.
+          Authorization: 'Bearer placeholder',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          messages: [{ role: 'user', content: 'test' }],
+        }),
+        signal: controller.signal,
+      },
+    );
+    clearTimeout(timeout);
+    if (res.status === 200) {
+      logger.debug('Token verified via API');
+      return { ok: true };
+    }
+    if (res.status === 401) {
+      return { ok: false, error: 'Token rejected by API (401)' };
+    }
+    // Other status codes (400, 429, etc.) mean the token worked but request was bad — that's OK
+    logger.debug({ status: res.status }, 'Token verification: non-401 response (token valid)');
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `Token verification failed: ${msg}` };
   }
 }
