@@ -10,7 +10,7 @@ This file is the single source of truth for what is running, how it is configure
 ## Host Environment
 
 - macOS Darwin 25.3, Apple Silicon (Mac mini)
-- Ollama localhost:11434 — qwen2.5vl:7b
+- Ollama localhost:11434 — `nomic-embed-text` (embeddings), `gemma4:e2b` (memory synthesis), `qwen2.5vl:7b` (vision / crawler extraction)
 - whisper-cpp (local STT), edge-tts (TTS), ffmpeg
 - Docker Desktop
 - Node 20, npm, TypeScript
@@ -42,14 +42,18 @@ This file is the single source of truth for what is running, how it is configure
 
 ## Scheduled Tasks
 
-| ID | Group | Schedule | What It Does |
-|----|-------|----------|-------------|
-| memory-reindex-telegram_main | telegram_main | `0 12,22 * * *` | Rebuilds vector index over conversation archive |
-| memory-reindex-telegram_dev | telegram_dev | `0 12,22 * * *` | Rebuilds vector index over conversation archive |
-| memory-reindex-telegram_deutschflow | telegram_deutschflow | `0 12,22 * * *` | Rebuilds vector index over conversation archive |
-| memory-reindex-telegram_linguaflow | telegram_linguaflow | `0 12,22 * * *` | Rebuilds vector index over conversation archive |
+Memory reindexing runs on the **host** via launchd, not inside agent containers (the indexer talks to Ollama only — wrapping it in a Claude container wastes tokens and trips OAuth rate limits). All schedules below call `scripts/memory-reindex.sh` which runs `container/skills/memory-search/indexer.py` directly.
 
-**CoderBot indexer:** Triggered automatically after each coding session. Runs `container/skills/memory-search/indexer.py --group coder` directly on the host. Uses Ollama `nomic-embed-text` at `localhost:11434`.
+| Service (launchd) | Group | Schedule (local time) |
+|---|---|---|
+| `com.nanoclaw.reindex-main` | `telegram_main` | 03:00 / 09:00 / 15:00 / 21:00 |
+| `com.nanoclaw.reindex-dev`  | `telegram_dev`  | 00:30 / 06:30 / 12:30 / 18:30 |
+
+**Language bots** (`telegram_deutschflow`, `telegram_linguaflow`) are intentionally **not indexed** — ephemeral practice sessions, no semantic recall needed.
+
+**CoderBot indexer:** event-driven, not scheduled. Triggered automatically after each coding session by `coder-bot/src/index.ts`. Runs `container/skills/memory-search/indexer.py --group coder` directly on the host. Uses Ollama `nomic-embed-text` for embeddings and `gemma4:e2b` for synthesis at `localhost:11434`.
+
+**Adding a new group:** copy an existing reindex plist in `~/Library/LaunchAgents/`, change `Label`, the second `ProgramArguments` string (the group folder name), and pick `StartCalendarInterval` hours that don't collide with existing jobs. Then `launchctl load` it. Do **not** add `memory-reindex-*` rows to `scheduled_tasks` — that's the deprecated in-container path.
 
 ---
 
@@ -80,6 +84,44 @@ This file is the single source of truth for what is running, how it is configure
 | `~/.claude-coder/` | CoderBot's Claude Code config and OAuth state |
 | `crawler-bot/data/tatanano.db` | CrawlerBot's SQLite — jobs, pages, leads |
 | `mama-bot/data/mama.db` | MamaZdrowie's SQLite — glucose, meals, medication |
+| `scopes/` | Design notes and implementation plans (see "Scopes & Plans" below) |
+
+---
+
+## Capabilities & Roadmap
+
+Live capabilities NanoClaw bots can rely on **today**:
+
+- **Telegram** (channels: main, dev, deutschflow, linguaflow), **WhatsApp** (legacy `main` group), **Voice** (Whisper STT + edge-tts TTS, mirrored if user sends voice), **Image vision** (qwen2.5vl:7b via Ollama), **Memory search** (nomic-embed-text + gemma4:e2b synthesis), **Web crawl/lead scrape** (CrawlerBot only), **Ollama local models** (embeddings, synthesis, vision).
+
+**Planned / scoped, not yet wired into bots:**
+
+- **Gmail (read/send/attachments)** — local Gmail MCP via GCP OAuth so all agents (CoderBot + container bots) can share one credential. Status: scoped, not started. Plan: `scopes/gmail-mcp-oauth/SCOPE.md`. **Note:** Claude Code on the host can already use Anthropic-hosted `claude.ai Gmail` MCP for itself, but container bots cannot — that's why the local MCP work is needed.
+- **NotebookLM knowledge hub** — see `scopes/notebooklm-knowledge-hub/`.
+- **CrawlerBot v2**, **Bart bot pool**, **Self-improving agent** — each has a scope file under `scopes/`.
+
+When a user asks "can you do X?", check both this section and `scopes/` before answering — the capability may be planned but not live.
+
+---
+
+## Scopes & Plans
+
+Design notes and implementation plans live in `/Users/tataadmin/nanoclaw/scopes/`. **Scopes are NOT indexed** by the memory pipeline — many were never executed and indexing them would pollute `knowledge.md` with unbuilt features. Bots should treat `scopes/` as a roadmap reference, not as ground truth.
+
+**How to use scopes:**
+
+- Before answering "is feature X built?" — grep `scopes/` for X. If a scope file exists, the feature is planned (status is in the SCOPE.md header). If no scope file exists and no code exists, the feature is neither built nor planned.
+- Before starting new design work — check `scopes/` and `scopes/archive/` to avoid re-scoping something that already has a plan.
+- After finishing implementation — move the scope from `scopes/{name}/` to `scopes/archive/{name}/` so the active list stays small.
+
+**Current active scopes (as of 2026-04-10):**
+
+- `scopes/gmail-mcp-oauth/` — local Gmail MCP for all agents
+- `scopes/notebooklm-knowledge-hub/` — NotebookLM as a shared knowledge layer
+- `scopes/bart-bot-pool/` — Bart bot pool design
+- `scopes/fix-knowledge-duplicates/` — dedup pass for memory synthesis
+- `scopes/upstream-merge-2026-04-06/` — pending NanoClaw upstream merge
+- `scopes/crawler-bot-v2.md`, `scopes/lead-scraper.md`, `scopes/memory-improvements.md`, `scopes/self-improving-agent.md`, `scopes/bot-shared-awareness/` — standalone design notes
 
 ---
 

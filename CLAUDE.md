@@ -60,7 +60,7 @@ Separate Node.js processes outside the main NanoClaw router. Each has its own la
 Three-phase memory pipeline runs per group (weekly cron + on container idle):
 
 1. **Vector indexing** — chunks conversation archives, embeds via Ollama (`nomic-embed-text`), stores in `memory-index/index.json`
-2. **Synthesis** — Ollama (`qwen2.5vl:7b`) extracts structured facts (decisions, built, fixed, discussed, open, preferences) into `knowledge.md`
+2. **Synthesis** — Ollama (`gemma4:e2b`) extracts structured facts (decisions, built, fixed, discussed, open, preferences) into `knowledge.md`
 3. **Knowledge indexing** — re-embeds `knowledge.md` with `source: "knowledge"` for higher-rank search results
 
 Files: `container/skills/memory-search/indexer.py` (build), `container/skills/memory-search/search.py` (query)
@@ -167,25 +167,30 @@ systemctl --user restart nanoclaw
 
 ## New Group Checklist
 
-After registering any new group, always add a weekly memory reindex scheduler entry to the DB:
+After registering any new container group, decide whether it needs memory indexing:
 
-```bash
-sqlite3 /Users/tataadmin/nanoclaw/store/messages.db "
-INSERT INTO scheduled_tasks (id, group_folder, chat_jid, prompt, schedule_type, schedule_value, next_run, status, created_at)
-VALUES (
-  'memory-reindex-{folder}',
-  '{folder}',
-  '{jid}',
-  'Run the memory indexer to rebuild the conversation archive index. Execute: python3 /home/node/.claude/skills/memory-search/indexer.py --group {folder} --base /workspace/project --index-dir /workspace/group/memory-index',
-  'cron',
-  '0 3 * * 0',
-  '{next_sunday_3am}',
-  'pending',
-  datetime(''now'')
-);"
-```
+- **Language-practice / ephemeral groups** (e.g. `telegram_linguaflow`, `telegram_deutschflow`): skip indexing entirely. They don't benefit from semantic recall.
+- **Real assistant groups** (e.g. `telegram_main`, `telegram_dev`): add a **host-side launchd reindex job**, never a DB-scheduled in-container task.
 
-Replace `{folder}` with the group folder name (e.g. `telegram_main`) and `{jid}` with the group JID from `registered_groups`. Without this entry, the group's conversations are never indexed and agents cannot do semantic recall over past sessions.
+### Why host-side, not in-container
+
+`container/skills/memory-search/indexer.py` only talks to **Ollama** — it never calls the Claude API. Wrapping it in a Claude agent container (via `scheduled_tasks`) burns Claude tokens for nothing and trips OAuth rate limits when multiple groups fire on the same minute. The host script `scripts/memory-reindex.sh` runs the same indexer directly with zero Claude involvement.
+
+### How to add a host reindex job
+
+1. Copy an existing plist as a template:
+   ```bash
+   cp ~/Library/LaunchAgents/com.nanoclaw.reindex-main.plist \
+      ~/Library/LaunchAgents/com.nanoclaw.reindex-{folder}.plist
+   ```
+2. Edit the new plist: change the `Label`, the second `ProgramArguments` string to `{folder}`, and the `StartCalendarInterval` hours so they **don't collide** with existing reindex jobs (`reindex-main` runs at 03/09/15/21, `reindex-dev` at 00:30/06:30/12:30/18:30). Pick a different hour offset for each new group.
+3. Load it:
+   ```bash
+   launchctl load ~/Library/LaunchAgents/com.nanoclaw.reindex-{folder}.plist
+   ```
+4. Verify the next run writes to `~/Library/Logs/nanoclaw-reindex/reindex.log` with `Done. Errors: 0`.
+
+Without a reindex job the group's conversations are never indexed and agents cannot do semantic recall over past sessions.
 
 ## Container Build Cache
 
