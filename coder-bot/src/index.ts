@@ -11,7 +11,7 @@ import { validatePrompt, requiresScriptConfirmation } from './validator.js'
 const execFileAsync = promisify(execFile)
 const BARTEK_USER_ID = 8774386022
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434'
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5vl:7b'
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4:e2b'
 const VALID_MODELS = ['sonnet', 'opus', 'haiku', 'ollama']
 let useOllama = false
 const VOICE_TMP = path.join(os.tmpdir(), 'nanoclaw-voice')

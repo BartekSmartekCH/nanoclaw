@@ -38,7 +38,7 @@ EMBED_MODEL = "nomic-embed-text"
 SYNTH_MODEL = "gemma4:e2b"
 CHUNK_CHARS = 1800   # ~500 tokens at ~3.5 chars/token
 CHUNK_OVERLAP = 200
-SYNTH_MAX_CHARS = 10000  # ~2500 tokens, safe headroom for qwen2.5vl:7b + prompt
+SYNTH_MAX_CHARS = 10000  # ~2500 tokens, safe headroom for gemma4:e2b + prompt
 
 
 # ---------------------------------------------------------------------------
