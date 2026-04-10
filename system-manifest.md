@@ -93,10 +93,11 @@ Memory reindexing runs on the **host** via launchd, not inside agent containers 
 Live capabilities NanoClaw bots can rely on **today**:
 
 - **Telegram** (channels: main, dev, deutschflow, linguaflow), **WhatsApp** (legacy `main` group), **Voice** (Whisper STT + edge-tts TTS, mirrored if user sends voice), **Image vision** (qwen2.5vl:7b via Ollama), **Memory search** (nomic-embed-text + gemma4:e2b synthesis), **Web crawl/lead scrape** (CrawlerBot only), **Ollama local models** (embeddings, synthesis, vision).
+- **Gmail read/send/attachments** — **live for Claude Code (host) and CoderBot only** as of 2026-04-10 via local MCP `@gongrzhe/server-gmail-autoauth-mcp`. Authorized account: `bart70895@gmail.com`. OAuth artifacts at `~/.gmail-mcp/` (`gcp-oauth.keys.json` = client credential, `credentials.json` = cached refresh token). 22 tools exposed including `download_attachment` (the hosted `claude.ai Gmail` MCP cannot download attachments — that was the main motivation; proven working with 29 .eml files into `~/Documents/NanoClaw/silicon-emails/`). **Container bots (`telegram_main`, `telegram_dev`) cannot use Gmail** — Phase 2 deferred. **Token caveat:** Testing-mode OAuth refresh token expires every ~7 days; recovery is `npx @gongrzhe/server-gmail-autoauth-mcp auth` from a terminal with browser access.
 
 **Planned / scoped, not yet wired into bots:**
 
-- **Gmail (read/send/attachments)** — local Gmail MCP via GCP OAuth so all agents (CoderBot + container bots) can share one credential. Status: scoped, not started. Plan: `scopes/gmail-mcp-oauth/SCOPE.md`. **Note:** Claude Code on the host can already use Anthropic-hosted `claude.ai Gmail` MCP for itself, but container bots cannot — that's why the local MCP work is needed.
+- **Gmail for container bots (Phase 2)** — would require mounting `~/.gmail-mcp/` RO into containers + adding the MCP entry to `container/agent-runner/src/index.ts` mcpServers + image rebuild + NanoClaw restart. Implementation notes preserved in approved plan at `~/.claude/plans/misty-whistling-pine.md` (Deferred section). Workaround today: ask CoderBot in its dedicated chat for any Gmail action.
 - **NotebookLM knowledge hub** — see `scopes/notebooklm-knowledge-hub/`.
 - **CrawlerBot v2**, **Bart bot pool**, **Self-improving agent** — each has a scope file under `scopes/`.
 

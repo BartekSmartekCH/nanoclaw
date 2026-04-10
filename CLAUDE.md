@@ -10,6 +10,8 @@ On first interaction of a new session, read the last 3 entries from `groups/glob
 
 Single Node.js process with skill-based channel system. Channels (WhatsApp, Telegram, Slack, Discord, Gmail) are skills that self-register at startup. Messages route to Claude Agent SDK running in containers (Linux VMs). Each group has isolated filesystem and memory.
 
+**Gmail tool availability (as of 2026-04-10):** Gmail is available as an MCP **tool** to Claude Code on host and to CoderBot via local MCP `@gongrzhe/server-gmail-autoauth-mcp` (account `bart70895@gmail.com`, OAuth at `~/.gmail-mcp/`). It is **not** available to container agents in `telegram_main`/`telegram_dev`/language groups — that's deferred Phase 2. To use Gmail from Telegram, use the dedicated CoderBot chat. The hosted `claude.ai Gmail` MCP cannot download attachments; the local one can. 7-day token expiry caveat — re-auth weekly with `npx @gongrzhe/server-gmail-autoauth-mcp auth`. See `system-manifest.md` Capabilities & Roadmap for full details.
+
 ## Key Files
 
 | File | Purpose |
